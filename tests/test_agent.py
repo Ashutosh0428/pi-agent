@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from pi_agent.agent import Agent
 from pi_agent.config import AgentConfig
-from pi_agent.llm import AssistantResponse, ToolCall
+from pi_agent.llm import AssistantResponse, ToolCall, Usage
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.registry import build_default_tools
 
@@ -17,6 +17,8 @@ class FakeProvider:
 
     steps: list[AssistantResponse]
     name: str = "fake"
+    model: str = "fake-model"
+    supports_streaming: bool = False
     calls: int = field(default=0)
 
     def complete(self, system, messages, tools):  # noqa: ARG002 - interface
@@ -26,17 +28,11 @@ class FakeProvider:
 
 
 def _tool_step(text, call: ToolCall) -> AssistantResponse:
-    return AssistantResponse(
-        text=text,
-        tool_calls=[call],
-        assistant_message={"role": "assistant", "content": text},
-    )
+    return AssistantResponse(text=text, tool_calls=[call], usage=Usage(10, 5))
 
 
 def _final_step(text) -> AssistantResponse:
-    return AssistantResponse(
-        text=text, tool_calls=[], assistant_message={"role": "assistant", "content": text}
-    )
+    return AssistantResponse(text=text, tool_calls=[], usage=Usage(8, 3))
 
 
 def _make_agent(provider, tmp_path, **cfg):
@@ -70,9 +66,7 @@ class TestAgentLoop:
 
     def test_max_iterations_guard(self, tmp_path):
         # Provider always asks for a tool -> loop must stop at the cap.
-        looping = _tool_step(
-            "again", ToolCall("t", "list_dir", {"path": "."})
-        )
+        looping = _tool_step("again", ToolCall("t", "list_dir", {"path": "."}))
         provider = FakeProvider([looping])
         agent = _make_agent(provider, tmp_path, max_iterations=3)
         result = agent.run("loop forever")
@@ -109,3 +103,25 @@ class TestAgentLoop:
         assert "tool_call" in events
         assert "tool_result" in events
         assert "assistant_text" in events
+        assert "usage" in events
+
+    def test_usage_accumulates_across_turns(self, tmp_path):
+        provider = FakeProvider([
+            _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),  # 10 + 5
+            _final_step("done"),  # 8 + 3
+        ])
+        agent = _make_agent(provider, tmp_path)
+        agent.run("list")
+        assert agent.total_usage.input_tokens == 18
+        assert agent.total_usage.output_tokens == 8
+        assert agent.total_usage.total_tokens == 26
+
+    def test_neutral_transcript_shape(self, tmp_path):
+        provider = FakeProvider([
+            _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),
+            _final_step("done"),
+        ])
+        agent = _make_agent(provider, tmp_path)
+        agent.run("list")
+        roles = [m["role"] for m in agent.messages]
+        assert roles == ["user", "assistant", "tool", "assistant"]

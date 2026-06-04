@@ -1,12 +1,16 @@
 # pi-agent
 
+[![CI](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A **minimal terminal AI coding agent** — a small, readable harness that lets an
 LLM read, edit, and run code in your working directory through a tool-use loop.
-Inspired by the [Pi](https://github.com/badlogic/pi-mono) philosophy: lean,
-hackable, no feature bloat.
+Works with **Claude and GPT** from the same loop. Inspired by the
+[Pi](https://github.com/badlogic/pi-mono) philosophy: lean, hackable, no bloat.
 
-> Built as a learning + portfolio project. The core loop is ~100 lines; the
-> design makes adding new tools (and later, new LLM providers) trivial.
+> Built as a learning + portfolio project. The core loop is ~120 lines; the
+> transcript is provider-neutral, so adding a tool *or a model* is trivial.
 
 ## What it does
 
@@ -17,17 +21,31 @@ you ──prompt──► pi ──► LLM decides ──► calls tools (read/w
 ```
 
 - **ReAct tool-use loop** — the model plans, calls tools, observes results, repeats.
+- **Multi-provider** — Anthropic **Claude** and **OpenAI GPT** behind one
+  interface; switch models *mid-conversation* with `/model` (the transcript is
+  provider-neutral, so it carries across).
+- **Streaming** — text streams token-by-token in the REPL (Anthropic).
+- **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
+- **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
 - **Tools:** `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`, `run_bash`.
 - **Sandboxed:** every path is confined to the working directory; no `../` escapes.
 - **Safe by default:** confirms before mutating tools (write/edit/bash) unless `--yes`.
-- **Provider-agnostic core:** the loop talks to an interface, so new models slot in later.
 
 ## Install
 
 ```bash
-pip install -e .
+pip install -e .              # Anthropic + core
+pip install -e ".[openai]"    # add OpenAI support
+
+cp .env.example .env          # then fill in your key(s)
 export ANTHROPIC_API_KEY=sk-ant-...
+# or, for GPT models:
+export OPENAI_API_KEY=sk-...
 ```
+
+> **Keys never touch the repo.** pi reads them from the environment only — they
+> are never stored or logged, `.env` is gitignored, and `.env.example` holds
+> placeholders only.
 
 ## Use
 
@@ -39,13 +57,16 @@ pi
 pi "add a docstring to main.py"
 
 # Options
-pi --dir ./myproject      # set the sandbox/working directory
-pi --yes                  # auto-approve mutating tools
-pi --no-shell             # disable the run_bash tool
-pi --model claude-opus-4-7
+pi --dir ./myproject          # set the sandbox/working directory
+pi --yes                      # auto-approve mutating tools
+pi --no-shell                 # disable the run_bash tool
+pi --no-stream                # disable streaming
+pi --model gpt-4o-mini        # provider inferred from the model id
+pi --provider openai --model gpt-4o
+pi --think                    # Anthropic extended thinking (uses extra billed tokens)
 ```
 
-REPL commands: `/help`, `/tools`, `/reset`, `/exit`.
+REPL commands: `/help`, `/tools`, `/model <id>`, `/think`, `/cost`, `/reset`, `/exit`.
 
 ## Architecture
 
@@ -53,17 +74,22 @@ REPL commands: `/help`, `/tools`, `/reset`, `/exit`.
 src/pi_agent/
   config.py        # AgentConfig + system prompt
   sandbox.py       # path-safety boundary (the security choke-point)
-  llm.py           # LLMProvider interface + AnthropicProvider
+  llm.py           # neutral transcript <-> Anthropic / OpenAI; Usage + cost
   agent.py         # the tool-use loop (provider- and UI-agnostic)
-  repl.py          # terminal front-end (rich)
+  repl.py          # terminal front-end (rich): streaming, /model, /cost, /think
   cli.py           # `pi` entry point
   tools/
-    base.py        # Tool dataclass
+    base.py        # Tool dataclass (neutral tool spec)
     filesystem.py  # read / write / edit / list
     shell.py       # run_bash (sandboxed)
     search.py      # grep
     registry.py    # holds tools, dispatches calls
 ```
+
+The agent keeps its transcript in a **provider-neutral** shape
+(`user` / `assistant` / `tool`); each provider translates it to its own wire
+format (Anthropic content blocks vs OpenAI `tool_calls`). That seam is what lets
+the same conversation move between Claude and GPT.
 
 ## Extending it (the whole point)
 
@@ -78,23 +104,30 @@ Tool(
 )
 ```
 
-**Add a provider** — implement `LLMProvider.complete(...)` returning an
-`AssistantResponse`. The agent loop needs no changes.
+**Add a provider** — implement `LLMProvider.complete(...)` (translate the neutral
+transcript, call the API, return an `AssistantResponse`). The agent loop needs no
+changes.
 
 ## Testing
 
 ```bash
-pytest          # uses a scripted fake provider — no API key required
+pytest          # uses a scripted fake provider — no API key, no network
 ```
 
-Tests cover the sandbox boundary, every tool, and the agent loop (tool
-execution, max-iteration guard, confirmation, event emission).
+Tests cover the sandbox boundary, every tool, the agent loop (tool execution,
+max-iteration guard, confirmation, events, usage accounting), and the
+**provider translators** (neutral → Anthropic / OpenAI).
+
+## Notes on cost
+
+`/cost` and the per-turn line show **estimated** USD from an editable price table
+in `llm.py` — treat them as ballpark, not billing. Extended thinking (`--think`)
+spends extra tokens, so it is **off by default**.
 
 ## Roadmap
 
 - More tools (git, web fetch, apply-patch)
-- Multi-provider routing (OpenAI / local) + `/model` switch
-- Streaming output
+- OpenAI streaming (Anthropic streams today; OpenAI uses full-response)
 - Optional web playground (file-tools only, sandboxed)
 
 ---

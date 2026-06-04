@@ -8,9 +8,16 @@ import sys
 
 from pi_agent.agent import Agent
 from pi_agent.config import AgentConfig
-from pi_agent.llm import AnthropicProvider
+from pi_agent.llm import build_provider, infer_provider
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.registry import build_default_tools
+
+# Which environment variable holds the key for each provider. The key itself is
+# never read, printed, or stored by pi — the vendor SDK reads it from the env.
+PROVIDER_ENV_KEY = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,35 +26,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("prompt", nargs="*", help="One-shot prompt (omit for REPL).")
     parser.add_argument("--model", help="Model id (overrides PI_AGENT_MODEL).")
+    parser.add_argument(
+        "--provider",
+        choices=sorted(PROVIDER_ENV_KEY),
+        help="LLM provider (default: inferred from the model id).",
+    )
     parser.add_argument("--dir", default=".", help="Working directory (sandbox root).")
     parser.add_argument("--yes", action="store_true", help="Auto-approve mutating tools.")
     parser.add_argument("--no-shell", action="store_true", help="Disable the run_bash tool.")
+    parser.add_argument("--no-stream", action="store_true", help="Disable streaming output.")
+    parser.add_argument(
+        "--think",
+        action="store_true",
+        help="Enable extended thinking (Anthropic only; uses extra billed tokens).",
+    )
     args = parser.parse_args(argv)
-
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print(
-            "Error: ANTHROPIC_API_KEY is not set. Export it first:\n"
-            "    export ANTHROPIC_API_KEY=sk-ant-...",
-            file=sys.stderr,
-        )
-        return 1
 
     config = AgentConfig.from_env()
     if args.model:
         config.model = args.model
+    config.provider = args.provider or infer_provider(config.model)
     config.auto_approve = args.yes
     config.enable_shell = not args.no_shell
+    config.stream = not args.no_stream
+    config.thinking = args.think and config.provider == "anthropic"
 
-    provider = AnthropicProvider(model=config.model, max_tokens=config.max_tokens)
+    env_key = PROVIDER_ENV_KEY[config.provider]
+    if not os.environ.get(env_key):
+        print(
+            f"Error: {env_key} is not set. Export it first:\n"
+            f"    export {env_key}=...",
+            file=sys.stderr,
+        )
+        return 1
+
+    provider = build_provider(
+        config.model,
+        config.provider,
+        max_tokens=config.max_tokens,
+        thinking=config.thinking,
+        thinking_budget=config.thinking_budget,
+    )
     registry = build_default_tools(enable_shell=config.enable_shell)
     sandbox = Sandbox(args.dir)
     agent = Agent(provider=provider, registry=registry, sandbox=sandbox, config=config)
 
     if args.prompt:
         # One-shot mode: print the final answer and exit.
-        from pi_agent.repl import _make_event_handler
+        from pi_agent.repl import make_event_handler
 
-        agent.on_event = _make_event_handler()
+        agent.on_event = make_event_handler()
         agent.config.auto_approve = True  # non-interactive => can't prompt
         agent.run(" ".join(args.prompt))
         return 0

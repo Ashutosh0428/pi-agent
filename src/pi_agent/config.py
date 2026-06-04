@@ -30,11 +30,15 @@ class AgentConfig:
     """Runtime configuration for an agent session."""
 
     model: str = DEFAULT_MODEL
+    provider: str | None = None       # None -> inferred from the model id
     max_tokens: int = 4096
     max_iterations: int = 25          # tool-use loop safety cap
     system_prompt: str = SYSTEM_PROMPT
     enable_shell: bool = True         # expose the run_bash tool
     auto_approve: bool = False        # skip confirmation for write/edit/bash
+    stream: bool = True               # stream text deltas when the provider can
+    thinking: bool = False            # Anthropic extended thinking (opt-in, billed)
+    thinking_budget: int = 2048       # thinking tokens when enabled
 
     @classmethod
     def from_env(cls) -> "AgentConfig":

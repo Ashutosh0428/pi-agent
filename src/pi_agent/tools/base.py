@@ -27,7 +27,13 @@ class Tool:
     mutating: bool = False  # True for write/edit/bash -> may require confirmation
 
     def to_schema(self) -> dict[str, Any]:
-        """Return the tool definition in the Anthropic tools format."""
+        """Return a provider-neutral tool spec.
+
+        Each :class:`~pi_agent.llm.LLMProvider` translates this into its own
+        wire format (Anthropic uses it as-is; OpenAI wraps it under
+        ``function``). Keeping one neutral shape is what lets the same agent
+        talk to multiple providers.
+        """
         return {
             "name": self.name,
             "description": self.description,

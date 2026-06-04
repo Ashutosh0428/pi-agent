@@ -1,15 +1,28 @@
-"""LLM provider abstraction.
+"""LLM provider abstraction — the seam that makes pi multi-provider.
 
-The agent loop talks to an LLM only through :class:`LLMProvider`. This keeps the
-loop provider-agnostic: today there is one implementation (Anthropic), and
-adding OpenAI / local models later means writing one more class — no changes to
-the agent. Tests use a scripted fake provider, so they never need an API key.
+The agent loop talks to an LLM only through :class:`LLMProvider`, and it keeps
+its transcript in a **provider-neutral** shape (see :mod:`pi_agent.agent`).
+Each provider translates that neutral transcript into its own wire format:
+
+* Anthropic uses ``content`` blocks (``text`` / ``tool_use`` / ``tool_result``).
+* OpenAI uses ``tool_calls`` on the assistant message and ``role="tool"``
+  follow-ups.
+
+Because the transcript is neutral, you can switch models *mid-conversation*
+(``/model``) and even cross providers. Tests use a scripted fake provider, so
+they never need an API key or network access.
+
+No API key is ever read, stored, or logged here beyond handing it to the
+vendor SDK — keys come from the environment (see :mod:`pi_agent.cli`).
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol, runtime_checkable
+
+# --- core data types -------------------------------------------------------
 
 
 @dataclass
@@ -22,86 +35,319 @@ class ToolCall:
 
 
 @dataclass
-class AssistantResponse:
-    """Normalised result of one model turn.
+class ToolResult:
+    """The output of running one :class:`ToolCall`."""
 
-    ``assistant_message`` is the provider-native message dict to append to the
-    running transcript; the agent loop treats it as opaque.
-    """
+    id: str
+    name: str
+    output: str
+
+
+@dataclass
+class Usage:
+    """Token counts for one or more model turns."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    def __add__(self, other: "Usage") -> "Usage":
+        return Usage(
+            self.input_tokens + other.input_tokens,
+            self.output_tokens + other.output_tokens,
+        )
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
+@dataclass
+class AssistantResponse:
+    """Normalised result of one model turn (provider-independent)."""
 
     text: str
-    tool_calls: list[ToolCall]
-    assistant_message: dict[str, Any]
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    usage: Usage = field(default_factory=Usage)
     stop_reason: str = ""
 
 
+# --- cost estimation -------------------------------------------------------
+
+# Approximate USD per 1M tokens (input, output). Matched by substring on the
+# model id. These are estimates for display only — update as prices change.
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus": (15.0, 75.0),
+    "claude-sonnet": (3.0, 15.0),
+    "claude-haiku": (0.80, 4.0),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.0),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.0, 8.0),
+    "o4-mini": (1.10, 4.40),
+    "o3": (2.0, 8.0),
+}
+
+
+def estimate_cost(model: str, usage: Usage) -> float | None:
+    """Rough USD cost for ``usage`` on ``model``; ``None`` if price unknown."""
+    for key, (in_price, out_price) in MODEL_PRICING.items():
+        if key in model:
+            return (
+                usage.input_tokens / 1_000_000 * in_price
+                + usage.output_tokens / 1_000_000 * out_price
+            )
+    return None
+
+
+# --- neutral transcript -> provider wire formats ---------------------------
+# A neutral message is one of:
+#   {"role": "user", "content": str}
+#   {"role": "assistant", "content": str, "tool_calls": list[ToolCall]}
+#   {"role": "tool", "results": list[ToolResult]}
+
+NeutralMessage = dict[str, Any]
+
+
+def to_anthropic_messages(messages: list[NeutralMessage]) -> list[dict[str, Any]]:
+    """Translate the neutral transcript into Anthropic Messages format."""
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        role = msg["role"]
+        if role == "user":
+            out.append({"role": "user", "content": msg["content"]})
+        elif role == "assistant":
+            blocks: list[dict[str, Any]] = []
+            if msg.get("content"):
+                blocks.append({"type": "text", "text": msg["content"]})
+            for call in msg.get("tool_calls", []):
+                blocks.append(
+                    {"type": "tool_use", "id": call.id, "name": call.name, "input": call.args}
+                )
+            out.append({"role": "assistant", "content": blocks or msg.get("content", "")})
+        elif role == "tool":
+            out.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": r.id, "content": r.output}
+                        for r in msg["results"]
+                    ],
+                }
+            )
+    return out
+
+
+def to_openai_messages(system: str, messages: list[NeutralMessage]) -> list[dict[str, Any]]:
+    """Translate the neutral transcript into OpenAI Chat Completions format."""
+    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    for msg in messages:
+        role = msg["role"]
+        if role == "user":
+            out.append({"role": "user", "content": msg["content"]})
+        elif role == "assistant":
+            entry: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or None}
+            calls = msg.get("tool_calls", [])
+            if calls:
+                entry["tool_calls"] = [
+                    {
+                        "id": c.id,
+                        "type": "function",
+                        "function": {"name": c.name, "arguments": json.dumps(c.args)},
+                    }
+                    for c in calls
+                ]
+            out.append(entry)
+        elif role == "tool":
+            for r in msg["results"]:
+                out.append({"role": "tool", "tool_call_id": r.id, "content": r.output})
+    return out
+
+
+def to_openai_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Wrap neutral tool specs into OpenAI's ``function`` tool format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in tools
+    ]
+
+
+# --- provider interface ----------------------------------------------------
+
+DeltaCallback = Callable[[str], None]
+
+
+@runtime_checkable
 class LLMProvider(Protocol):
-    """Interface every provider must implement."""
+    """Interface every provider implements."""
 
     name: str
+    model: str
+    supports_streaming: bool
 
     def complete(
-        self,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
+        self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
     ) -> AssistantResponse: ...
 
 
 @dataclass
 class AnthropicProvider:
-    """Anthropic Claude provider using the Messages API with tool use."""
+    """Anthropic Claude provider (Messages API with tool use)."""
 
     model: str
     max_tokens: int = 4096
+    thinking: bool = False
+    thinking_budget: int = 2048
     api_key: str | None = None
     name: str = field(default="anthropic", init=False)
 
     def __post_init__(self) -> None:
-        # Imported lazily so importing this module (e.g. in tests) does not
-        # require the anthropic package or an API key.
+        # Lazy import so importing this module (e.g. in tests) needs neither the
+        # anthropic package nor an API key.
         import anthropic
 
         self._client = anthropic.Anthropic(api_key=self.api_key)
 
-    def complete(
-        self,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-    ) -> AssistantResponse:
-        response = self._client.messages.create(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=system,
-            messages=messages,
-            tools=tools,
-        )
+    @property
+    def supports_streaming(self) -> bool:
+        # Extended thinking is sent over the non-streaming path for simplicity.
+        return not self.thinking
 
+    def _request_kwargs(
+        self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        max_tokens = self.max_tokens
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": to_anthropic_messages(messages),
+            "tools": tools,
+        }
+        if self.thinking:
+            # max_tokens must exceed the thinking budget.
+            kwargs["max_tokens"] = max(max_tokens, self.thinking_budget + 1024)
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": self.thinking_budget}
+        return kwargs
+
+    @staticmethod
+    def _parse(content: list[Any]) -> tuple[str, list[ToolCall]]:
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
-        content_blocks: list[dict[str, Any]] = []
-
-        for block in response.content:
+        for block in content:
             if block.type == "text":
                 text_parts.append(block.text)
-                content_blocks.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
-                tool_calls.append(
-                    ToolCall(id=block.id, name=block.name, args=dict(block.input))
-                )
-                content_blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    }
-                )
+                tool_calls.append(ToolCall(id=block.id, name=block.name, args=dict(block.input)))
+            # "thinking" blocks are intentionally not surfaced to the transcript.
+        return "".join(text_parts), tool_calls
 
+    def complete(
+        self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
+    ) -> AssistantResponse:
+        response = self._client.messages.create(**self._request_kwargs(system, messages, tools))
+        text, tool_calls = self._parse(response.content)
         return AssistantResponse(
-            text="".join(text_parts),
+            text=text,
             tool_calls=tool_calls,
-            assistant_message={"role": "assistant", "content": content_blocks},
+            usage=Usage(response.usage.input_tokens, response.usage.output_tokens),
             stop_reason=response.stop_reason or "",
         )
+
+    def stream(
+        self,
+        system: str,
+        messages: list[NeutralMessage],
+        tools: list[dict[str, Any]],
+        on_delta: DeltaCallback,
+    ) -> AssistantResponse:
+        """Stream text deltas via ``on_delta``; return the full normalised turn."""
+        kwargs = self._request_kwargs(system, messages, tools)
+        with self._client.messages.stream(**kwargs) as stream:
+            for chunk in stream.text_stream:
+                on_delta(chunk)
+            final = stream.get_final_message()
+        text, tool_calls = self._parse(final.content)
+        return AssistantResponse(
+            text=text,
+            tool_calls=tool_calls,
+            usage=Usage(final.usage.input_tokens, final.usage.output_tokens),
+            stop_reason=final.stop_reason or "",
+        )
+
+
+@dataclass
+class OpenAIProvider:
+    """OpenAI (and OpenAI-compatible) provider via Chat Completions."""
+
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    name: str = field(default="openai", init=False)
+    supports_streaming: bool = field(default=False, init=False)
+
+    def __post_init__(self) -> None:
+        import openai
+
+        self._client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
+
+    def complete(
+        self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
+    ) -> AssistantResponse:
+        response = self._client.chat.completions.create(
+            model=self.model,
+            messages=to_openai_messages(system, messages),
+            tools=to_openai_tools(tools),
+        )
+        choice = response.choices[0]
+        message = choice.message
+        tool_calls = [
+            ToolCall(
+                id=tc.id,
+                name=tc.function.name,
+                args=json.loads(tc.function.arguments or "{}"),
+            )
+            for tc in (message.tool_calls or [])
+        ]
+        usage = Usage(0, 0)
+        if response.usage is not None:
+            usage = Usage(response.usage.prompt_tokens, response.usage.completion_tokens)
+        return AssistantResponse(
+            text=message.content or "",
+            tool_calls=tool_calls,
+            usage=usage,
+            stop_reason=choice.finish_reason or "",
+        )
+
+
+def infer_provider(model: str) -> str:
+    """Guess the provider from a model id."""
+    if model.startswith(("gpt", "o1", "o3", "o4", "chatgpt")):
+        return "openai"
+    return "anthropic"
+
+
+def build_provider(
+    model: str,
+    provider: str | None = None,
+    *,
+    max_tokens: int = 4096,
+    thinking: bool = False,
+    thinking_budget: int = 2048,
+) -> LLMProvider:
+    """Construct a provider for ``model`` (provider inferred unless given)."""
+    chosen = provider or infer_provider(model)
+    if chosen == "openai":
+        return OpenAIProvider(model=model)
+    return AnthropicProvider(
+        model=model,
+        max_tokens=max_tokens,
+        thinking=thinking,
+        thinking_budget=thinking_budget,
+    )
