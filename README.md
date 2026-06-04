@@ -3,9 +3,9 @@
 [![CI](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=Ashutosh0428/pi-agent&mainModule=streamlit_app.py)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/)
 
-> 🚀 **Try it in your browser** (bring your own key, sandboxed, no install): _add your Streamlit URL here after deploying_
+> 🚀 **[Try it live →](https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/)** — bring your own key, sandboxed, no install.
 
 A **minimal terminal AI coding agent** — a small, readable harness that lets an
 LLM read, edit, and run code in your working directory through a tool-use loop.
