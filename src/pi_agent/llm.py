@@ -340,14 +340,21 @@ def build_provider(
     max_tokens: int = 4096,
     thinking: bool = False,
     thinking_budget: int = 2048,
+    api_key: str | None = None,
 ) -> LLMProvider:
-    """Construct a provider for ``model`` (provider inferred unless given)."""
+    """Construct a provider for ``model`` (provider inferred unless given).
+
+    ``api_key`` is passed straight to the vendor SDK (used by the web demo to
+    run on the visitor's own key). When ``None`` the SDK reads it from the
+    environment. The key is never stored or logged by pi.
+    """
     chosen = provider or infer_provider(model)
     if chosen == "openai":
-        return OpenAIProvider(model=model)
+        return OpenAIProvider(model=model, api_key=api_key)
     return AnthropicProvider(
         model=model,
         max_tokens=max_tokens,
         thinking=thinking,
         thinking_budget=thinking_budget,
+        api_key=api_key,
     )

@@ -40,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable extended thinking (Anthropic only; uses extra billed tokens).",
     )
+    parser.add_argument(
+        "--skills-dir",
+        help="Directory of skills (<dir>/<skill>/SKILL.md) to inline into the prompt.",
+    )
     args = parser.parse_args(argv)
 
     config = AgentConfig.from_env()
@@ -50,6 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     config.enable_shell = not args.no_shell
     config.stream = not args.no_stream
     config.thinking = args.think and config.provider == "anthropic"
+
+    if args.skills_dir:
+        from pi_agent.skills import build_system_prompt, load_skills
+
+        config.system_prompt = build_system_prompt(
+            config.system_prompt, load_skills(args.skills_dir)
+        )
 
     env_key = PROVIDER_ENV_KEY[config.provider]
     if not os.environ.get(env_key):

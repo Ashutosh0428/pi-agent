@@ -3,6 +3,9 @@
 [![CI](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=Ashutosh0428/pi-agent&mainModule=streamlit_app.py)
+
+> 🚀 **Try it in your browser** (bring your own key, sandboxed, no install): _add your Streamlit URL here after deploying_
 
 A **minimal terminal AI coding agent** — a small, readable harness that lets an
 LLM read, edit, and run code in your working directory through a tool-use loop.
@@ -28,6 +31,10 @@ you ──prompt──► pi ──► LLM decides ──► calls tools (read/w
 - **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
 - **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
 - **Tools:** `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`, `run_bash`.
+- **Skills** — drop a `SKILL.md` in `skills/<name>/` and its guidance is inlined
+  into the system prompt (index + contents), AIOP-style. Ships with `write-tests`,
+  `code-review`, `refactor`.
+- **Web demo** — a sandboxed, bring-your-own-key Streamlit app (`streamlit_app.py`).
 - **Sandboxed:** every path is confined to the working directory; no `../` escapes.
 - **Safe by default:** confirms before mutating tools (write/edit/bash) unless `--yes`.
 
@@ -76,6 +83,7 @@ src/pi_agent/
   sandbox.py       # path-safety boundary (the security choke-point)
   llm.py           # neutral transcript <-> Anthropic / OpenAI; Usage + cost
   agent.py         # the tool-use loop (provider- and UI-agnostic)
+  skills.py        # load SKILL.md files, inline them into the system prompt
   repl.py          # terminal front-end (rich): streaming, /model, /cost, /think
   cli.py           # `pi` entry point
   tools/
@@ -84,12 +92,51 @@ src/pi_agent/
     shell.py       # run_bash (sandboxed)
     search.py      # grep
     registry.py    # holds tools, dispatches calls
+streamlit_app.py   # public web demo (BYO key, no shell, temp sandbox)
+skills/            # write-tests/ · code-review/ · refactor/  (SKILL.md each)
 ```
 
 The agent keeps its transcript in a **provider-neutral** shape
 (`user` / `assistant` / `tool`); each provider translates it to its own wire
 format (Anthropic content blocks vs OpenAI `tool_calls`). That seam is what lets
 the same conversation move between Claude and GPT.
+
+## Web demo (Streamlit)
+
+`streamlit_app.py` is a public-safe slice of pi you can host for free:
+
+- **Bring your own key** — the visitor pastes their Anthropic/OpenAI key; it is
+  used only for that session and **never stored, logged, or committed**.
+- **No shell** — `run_bash` is disabled, so visitors can't run commands on the host.
+- **Sandboxed** — file tools are confined to a fresh temp directory per session.
+
+Run locally:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Deploy on **Streamlit Community Cloud**: push to GitHub → [share.streamlit.io](https://share.streamlit.io)
+→ pick this repo, main file `streamlit_app.py` → Deploy. No secrets to configure —
+keys are entered in the UI at runtime.
+
+## Skills
+
+A *skill* is a `SKILL.md` describing how to do one task well. At startup pi inlines
+a skill index + contents into the system prompt, so the model can apply them
+without spending a tool call to read them.
+
+```
+skills/<name>/SKILL.md   # frontmatter: name, description, trigger + the guidance
+```
+
+```bash
+pi --skills-dir ./skills "review llm.py"   # CLI loads skills from a directory
+```
+
+Bundled: `write-tests`, `code-review`, `refactor`. Add your own by dropping a new
+folder — no code changes.
 
 ## Extending it (the whole point)
 
@@ -128,7 +175,7 @@ spends extra tokens, so it is **off by default**.
 
 - More tools (git, web fetch, apply-patch)
 - OpenAI streaming (Anthropic streams today; OpenAI uses full-response)
-- Optional web playground (file-tools only, sandboxed)
+- Skill triggers / auto-selection by relevance
 
 ---
 
