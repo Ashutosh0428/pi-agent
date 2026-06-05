@@ -195,9 +195,12 @@ if prompt:
             st.session_state.messages.append(
                 {"role": "assistant", "content": answer or "_(no text response)_"}
             )
-        except Exception as exc:  # never leak the key; show a clean message
+        except Exception as exc:  # provider error body has no key; scrub anyway, to be safe
             status.update(label="error", state="error")
-            st.error(f"Request failed: {type(exc).__name__}. Check your key/model and try again.")
+            detail = str(exc)
+            if api_key:
+                detail = detail.replace(api_key, "***")
+            st.error(f"Request failed ({type(exc).__name__}): {detail[:500]}")
 
         files = sorted(p.name for p in Path(_sandbox_dir()).glob("*") if p.is_file())
         cols = st.columns(2)

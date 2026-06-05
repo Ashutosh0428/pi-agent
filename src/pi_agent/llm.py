@@ -147,7 +147,9 @@ def to_openai_messages(system: str, messages: list[NeutralMessage]) -> list[dict
         if role == "user":
             out.append({"role": "user", "content": msg["content"]})
         elif role == "assistant":
-            entry: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or None}
+            # Some OpenAI-compatible servers (e.g. Groq) reject ``content: null``
+            # on an assistant message; an empty string is accepted everywhere.
+            entry: dict[str, Any] = {"role": "assistant", "content": msg.get("content") or ""}
             calls = msg.get("tool_calls", [])
             if calls:
                 entry["tool_calls"] = [
