@@ -43,7 +43,7 @@ def _analyze_data(args: dict[str, Any], sb: Sandbox) -> str:
 
     try:
         if target.suffix.lower() in (".xlsx", ".xls"):
-            df = pd.read_excel(target)
+            df = pd.read_excel(target, nrows=MAX_ROWS)
         elif target.suffix.lower() in (".tsv",):
             df = pd.read_csv(target, sep="\t", nrows=MAX_ROWS)
         else:
@@ -73,7 +73,9 @@ def _analyze_data(args: dict[str, Any], sb: Sandbox) -> str:
         cols = list(corr.columns)
         for i in range(len(cols)):
             for j in range(i + 1, len(cols)):
-                pairs.append((cols[i], cols[j], corr.iloc[i, j]))
+                v = corr.iloc[i, j]
+                if v == v:  # drop NaN (constant columns)
+                    pairs.append((cols[i], cols[j], v))
         pairs.sort(key=lambda t: t[2], reverse=True)
         lines.append("\n## Top correlations")
         for a, b, v in pairs[:5]:

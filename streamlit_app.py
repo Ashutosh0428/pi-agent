@@ -219,14 +219,18 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Tell the model what's already in its workspace (uploaded files), so weaker
-    # tool-users don't have to discover files — they just read_file by name.
-    workspace = sorted(p.name for p in Path(_sandbox_dir()).glob("*") if p.is_file())
+    # Tell the model what's already in its workspace (uploaded files / extracted
+    # projects), so weaker tool-users don't have to discover files. rglob so files
+    # inside an extracted project's subfolders are listed too; cap to keep it lean.
+    root = Path(_sandbox_dir())
+    all_files = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    workspace = all_files[:60]
     effective_prompt = prompt
     if workspace:
+        more = f" (+{len(all_files) - len(workspace)} more)" if len(all_files) > len(workspace) else ""
         effective_prompt = (
-            f"(Files in your working directory: {', '.join(workspace)}. "
-            "Use read_file to open one before reviewing or editing it.)\n\n" + prompt
+            f"(Files in your working directory: {', '.join(workspace)}{more}. "
+            "Use read_file / list_dir to open them before reviewing or editing.)\n\n" + prompt
         )
 
     with st.chat_message("assistant"):

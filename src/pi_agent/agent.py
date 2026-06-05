@@ -112,13 +112,13 @@ class Agent:
             and self.on_event is not None
         )
         if can_stream:
-            response = self._with_retry(
-                lambda: self.provider.stream(  # type: ignore[attr-defined]
-                    self.config.system_prompt,
-                    self.messages,
-                    tools,
-                    lambda delta: self._emit("assistant_delta", delta),
-                )
+            # Not wrapped in retry: a retry after partial streaming would re-emit
+            # already-shown deltas (duplicated text). Streaming is best-effort.
+            response = self.provider.stream(  # type: ignore[attr-defined]
+                self.config.system_prompt,
+                self.messages,
+                tools,
+                lambda delta: self._emit("assistant_delta", delta),
             )
             return response, True
         response = self._with_retry(
