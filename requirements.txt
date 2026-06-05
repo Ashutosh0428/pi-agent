@@ -2,7 +2,7 @@
 # Local CLI users should `pip install -e .` instead (see pyproject.toml).
 streamlit>=1.32
 anthropic>=0.40
-openai>=1.50
+openai>=1.51
 pandas>=2.0
 python-pptx>=0.6.21
 openpyxl>=3.1

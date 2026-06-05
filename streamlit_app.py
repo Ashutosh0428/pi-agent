@@ -55,6 +55,15 @@ def _sandbox_dir() -> str:
     return st.session_state.sandbox_dir
 
 
+@st.cache_data(show_spinner="Fetching available models…", ttl=3600)
+def _available_models(provider: str, key: str) -> list[str]:
+    """Live model ids for this key (cached per provider+key). [] on failure."""
+    try:
+        return list_models(provider, api_key=key or None)
+    except Exception:  # noqa: BLE001 - any failure -> fall back to presets
+        return []
+
+
 def _render_plan(box, steps) -> None:
     rows = [
         f"{STATUS_ICON.get(s.get('status'), '⬜')} {s.get('step', '')}"
@@ -75,13 +84,6 @@ with st.sidebar:
         format_func=lambda p: f"{p.title()}  🆓" if PROVIDERS[p].free else p.title(),
     )
     spec = PROVIDERS[provider]
-    _CUSTOM = "✏️ custom…"
-    _picked = st.selectbox("Model", [*spec.models, _CUSTOM], index=0)
-    model = (
-        st.text_input("Custom model id", value=spec.default_model)
-        if _picked == _CUSTOM
-        else _picked
-    )
     api_key = st.text_input(
         f"{provider.title()} API key",
         type="password",
@@ -97,15 +99,20 @@ with st.sidebar:
             "(works when you run this app locally, not on the hosted demo)."
         )
 
-    if (api_key or not spec.requires_key) and st.button(
-        "🔎 List models my key supports", use_container_width=True
-    ):
-        try:
-            ids = list_models(provider, api_key=api_key or None)
-            st.caption(f"{len(ids)} models — paste one into ✏️ custom:")
-            st.code("\n".join(ids) or "(none returned)")
-        except Exception as exc:  # noqa: BLE001
-            st.warning(f"Couldn't list models: {type(exc).__name__}")
+    # Model picker — populated live from the provider's /models endpoint when a
+    # key is present (always the real, current ids), else falls back to presets.
+    _options = list(spec.models)
+    if api_key or not spec.requires_key:
+        _fetched = _available_models(provider, api_key or "")
+        if _fetched:
+            _options = _fetched
+    _CUSTOM = "✏️ custom…"
+    _picked = st.selectbox(f"Model ({len(_options)} available)", [*_options, _CUSTOM], index=0)
+    model = (
+        st.text_input("Custom model id", value=spec.default_model)
+        if _picked == _CUSTOM
+        else _picked
+    )
 
     use_skills = st.toggle("Use skills (plan, tests, review, debug, …)", value=True)
 
