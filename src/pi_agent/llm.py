@@ -293,6 +293,7 @@ class OpenAIProvider:
     model: str
     api_key: str | None = None
     base_url: str | None = None
+    max_tokens: int = 4096
     name: str = field(default="openai", init=False)
     supports_streaming: bool = field(default=False, init=False)
 
@@ -308,6 +309,7 @@ class OpenAIProvider:
             model=self.model,
             messages=to_openai_messages(system, messages),
             tools=to_openai_tools(tools),
+            max_tokens=self.max_tokens,  # explicit: some proxies (EURI) inject a too-large default
         )
         choice = response.choices[0]
         message = choice.message
@@ -438,7 +440,9 @@ def build_provider(
         api_key = "ollama"
 
     if kind == "openai":
-        return OpenAIProvider(model=model, api_key=api_key, base_url=base_url)
+        return OpenAIProvider(
+            model=model, api_key=api_key, base_url=base_url, max_tokens=max_tokens
+        )
     return AnthropicProvider(
         model=model,
         max_tokens=max_tokens,
