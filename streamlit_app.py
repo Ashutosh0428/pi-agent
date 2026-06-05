@@ -223,18 +223,6 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Downloadable artifacts the agent produced (e.g. generated .pptx decks).
-_artifacts = sorted(
-    p for p in Path(_sandbox_dir()).glob("*")
-    if p.is_file() and p.suffix.lower() in (".pptx", ".png", ".pdf")
-)
-if _artifacts:
-    with st.expander(f"📥 Downloads ({len(_artifacts)})", expanded=True):
-        for _p in _artifacts:
-            st.download_button(
-                f"⬇ {_p.name}", data=_p.read_bytes(), file_name=_p.name, key=f"dl_{_p.name}"
-            )
-
 # ── Chat turn ────────────────────────────────────────────────────────────────
 prompt = st.chat_input("Ask pi to plan, write, review, or edit code…")
 if prompt:
@@ -298,3 +286,17 @@ if prompt:
         elif tok:
             est = estimate_cost(model, Usage(usage_box["in"], usage_box["out"]))
             cols[1].caption(f"📊 {tok} tokens" + (f" · ~${est:.4f}" if est is not None else ""))
+
+
+# Downloads — rendered LAST, so a file the agent just created (e.g. a generated
+# .pptx) shows its button on the same run, not only after the next interaction.
+_artifacts = sorted(
+    p for p in Path(_sandbox_dir()).glob("*")
+    if p.is_file() and p.suffix.lower() in (".pptx", ".png", ".pdf", ".csv", ".docx", ".xlsx")
+)
+if _artifacts:
+    st.markdown("### 📥 Downloads")
+    for _p in _artifacts:
+        st.download_button(
+            f"⬇ {_p.name}", data=_p.read_bytes(), file_name=_p.name, key=f"dl_{_p.name}"
+        )
