@@ -1,76 +1,78 @@
-# pi-agent
+<h1 align="center">🤖 pi-agent</h1>
 
-[![CI](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/)
+<p align="center">
+  <em>A minimal, transparent AI coding agent — multi-provider (paid · free · local),<br/>
+  sandboxed, with a planner, sub-agents, skills, data analysis, and slide generation.</em>
+</p>
 
-> 🚀 **[Try it live →](https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/)** — bring your own key, sandboxed, no install.
+<p align="center">
+  <a href="https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml"><img src="https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
+  <a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/"><img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg" alt="Open in Streamlit"></a>
+</p>
 
-A **minimal terminal AI coding agent** — a small, readable harness that lets an
-LLM read, edit, and run code in your working directory through a tool-use loop.
-Works with **Claude and GPT** from the same loop. Inspired by the
-[Pi](https://github.com/badlogic/pi-mono) philosophy: lean, hackable, no bloat.
+<p align="center">
+  <b><a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/">🚀 Try it live</a></b> &nbsp;·&nbsp;
+  <a href="#-run-it-locally">Run locally</a> &nbsp;·&nbsp;
+  <a href="#-skills">Skills</a> &nbsp;·&nbsp;
+  <a href="#-architecture">Architecture</a>
+</p>
 
-> Built as a learning + portfolio project. The core loop is ~120 lines; the
+---
+
+pi lets an LLM **read, edit, and run code** in your working directory through a
+tool-use loop — and shows you everything it does. It speaks to **Claude, GPT,
+free models (Groq · OpenRouter · Gemini), and local Ollama** through one
+provider-neutral core. Inspired by the [Pi](https://github.com/badlogic/pi-mono)
+philosophy: lean, hackable, no bloat.
+
+> Built as a learning + portfolio project. The core loop is ~150 lines; the
 > transcript is provider-neutral, so adding a tool *or a model* is trivial.
 
-## What it does
+## 🔁 How it works
 
+```mermaid
+flowchart TD
+    U(["🧑 You — prompt"]) --> AG["🤖 Agent loop"]
+    AG -->|"ask (+ tools + skills)"| LLM{{"LLM"}}
+    LLM -->|"tool calls"| T["🔧 Run tools"]
+    T -->|"results"| AG
+    LLM -->|"no more tools"| OUT(["✅ Answer + live plan + token cost"])
+    AG -. "retry transient errors (≤5×)" .-> LLM
 ```
-you ──prompt──► pi ──► LLM decides ──► calls tools (read/write/edit/grep/bash)
-                          ▲                       │
-                          └──── tool results ─────┘   (loops until done)
-```
 
-- **ReAct tool-use loop** — the model plans, calls tools, observes results, repeats.
-- **Planner + live todos** — the model declares a step plan via the `update_plan`
-  tool; the web app renders it as a live checklist (⬜→⏳→✅), Claude-Code style.
-- **Multi-provider — paid, free & local** — **Claude**, **GPT**, free tiers
-  **Groq** / **OpenRouter**, and **Ollama** (local, no key) behind one interface;
-  switch models *mid-conversation* with `/model` (the transcript is provider-neutral).
-- **Project ZIP upload** — drop a zipped repo into the web app (zip-slip-safe)
-  and ask it to *explain the project* — purpose, end-to-end flow, components.
-- **Sub-agents** — the agent can `delegate` a focused subtask to a sequential
-  sub-agent (one level deep, no recursion) for large jobs.
-- **Resilient** — transient model errors (rate-limit, 5xx, timeout) auto-retry
-  up to 5× with backoff; permanent errors (bad key/request) fail fast.
-- **Streaming** — text streams token-by-token in the REPL (Anthropic).
-- **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
-- **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
-- **Tools:** `update_plan`, `delegate`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`,
-  `run_command` (restricted, read-only — safe for the public web app), `run_bash` (full shell, local only).
-- **Skills** — drop a `SKILL.md` in `skills/<name>/` and its guidance is inlined
-  into the system prompt (index + contents), AIOP-style. Ships with `planning`,
-  `orchestrate`, `write-tests`, `code-review`, `refactor`, `debug`, `explain-code`,
-  `explain-project`, `architecture`, `write-docs`.
-- **Web demo** — sandboxed, bring-your-own-key Streamlit app with file upload and
-  free-model support (`streamlit_app.py`).
-- **Sandboxed:** every path is confined to the working directory; no `../` escapes.
-- **Safe by default:** confirms before mutating tools (write/edit/bash) unless `--yes`.
+The model plans, calls tools, observes the results, and repeats until done —
+streaming text, a live to-do checklist, and the running token cost as it goes.
 
-## What you can do (and why it's useful)
+## ✨ Features
 
-| You ask… | pi does | why it helps |
-|---|---|---|
-| *"write a function that parses a CSV, save to `csv.py`, add a test"* | plans → `write_file` → `write_file` | scaffolds working code + tests in one go |
-| *"review `<uploaded file>`"* | reads it → returns prioritised findings | a second pair of eyes, on your own key |
-| *"there's a bug in `x.py`, the output is wrong — fix it"* | reads, diagnoses root cause, `edit_file` | fixes the cause, not the symptom |
-| *"refactor `y.py` to be simpler, don't change behaviour"* | small, safe `edit_file`s | cleanup without regressions |
-| *"explain what `z.py` does"* | reads + walks the logic | onboard to unfamiliar code fast |
+| | |
+|---|---|
+| 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** (free) · **Ollama** (local, no key) — switch mid-chat with `/model` |
+| 📋 **Planner + live todos** | declares a plan via `update_plan`; the web app renders a live ⬜→⏳→✅ checklist |
+| 🤝 **Sub-agents** | `delegate` a focused subtask to a sequential sub-agent (no recursion) for big jobs |
+| 📦 **Project ZIP upload** | drop a zipped repo (zip-slip-safe) → *"explain this project"* (purpose, flow, components) |
+| 📊 **Data analysis** | `analyze_data` profiles a CSV/Excel like a data scientist (stats, missing %, correlations) |
+| 📑 **Slide generation** | `make_slides` builds a downloadable `.pptx` from an outline |
+| 🔁 **Resilient** | transient errors (429/5xx/timeout) auto-retry ≤5× w/ backoff; bad key/request fail fast |
+| 🌊 **Streaming + cost** | token-by-token streaming, per-turn token counts, estimated session cost (`/cost`) |
+| 📜 **Skills** | `SKILL.md` files inlined into the prompt — 12 bundled, add your own with zero code |
+| 🔒 **Sandboxed & safe** | paths confined to the workspace; public web demo runs no raw shell |
 
-It's a **transparent** agent: you see the plan, every tool call, and the token
-cost — nothing hidden. Try it free with a Groq/OpenRouter key, then point it at
-your own code (locally, with shell + full tools enabled).
+**Tools:** `update_plan` · `delegate` · `read_file` · `write_file` · `edit_file` ·
+`list_dir` · `grep` · `run_command` (restricted, public-safe) · `run_bash` (full
+shell, local only) · `analyze_data` · `make_slides`.
 
-## Run it locally
+## 🚀 Run it locally
 
 ```bash
 git clone https://github.com/Ashutosh0428/pi-agent && cd pi-agent
-pip install -e ".[openai]"   # core + OpenAI / Groq / OpenRouter / Ollama (all OpenAI-compatible)
+pip install -e ".[openai]"          # core + OpenAI/Groq/OpenRouter/Ollama
+pip install -e ".[openai,data]"     # add data analysis + slides (pandas, python-pptx)
 ```
 
-Pick a provider and set its key (env var, or `cp .env.example .env` and fill it in):
+Pick a provider and set its key (env var, or `cp .env.example .env`):
 
 | Provider | Cost | Setup |
 |---|---|---|
@@ -78,143 +80,108 @@ Pick a provider and set its key (env var, or `cp .env.example .env` and fill it 
 | OpenAI | paid | `export OPENAI_API_KEY=sk-...` |
 | Groq | 🆓 free | `export GROQ_API_KEY=...` · [get a key](https://console.groq.com/keys) |
 | OpenRouter | 🆓 free | `export OPENROUTER_API_KEY=...` · [get a key](https://openrouter.ai/keys) |
+| Gemini | 🆓 free + paid | `export GEMINI_API_KEY=...` · [get a key](https://aistudio.google.com/apikey) |
 | **Ollama** | 🆓 local, no key | install Ollama → `ollama pull llama3.1` (runs at `localhost:11434`) |
 
-### Run the CLI
+**Any model works** — `--model` takes any id the provider offers, free or paid:
+`gemini-2.0-flash` (free) / `gemini-2.5-pro` (paid), `gpt-4o-mini` / `gpt-4o`,
+`claude-haiku-…` / `claude-opus-…`, `llama-3.3-70b-versatile`, etc.
 
 ```bash
 pi                                                          # interactive REPL (defaults to Claude)
 pi --provider groq --model llama-3.3-70b-versatile "explain this repo"
+pi --provider gemini --model gemini-2.0-flash "summarise what this project does"
+pi --provider ollama --model qwen2.5-coder:7b "write a string-reverse fn and a test"
 pi --skills-dir ./skills "review src/pi_agent/llm.py"
 pi --no-shell                                               # safe mode (disable run_bash)
 ```
 
-### Ollama — fully local, private, free, no key
+REPL commands: `/help` · `/tools` · `/model <id>` · `/think` · `/cost` · `/reset` · `/exit`.
 
-```bash
-# 1. install from https://ollama.com/download
-ollama pull qwen2.5-coder:7b      # or llama3.1 — coder models are better at tools
-ollama serve                      # usually already running in the background
-pi --provider ollama --model qwen2.5-coder:7b "write a string-reverse function and a test"
-```
+> **Keys never touch the repo** — read from the environment only, never stored or
+> logged; `.env` is gitignored.
 
-**Why Ollama instead of a cloud AI tool (Copilot, ChatGPT, Cursor)?**
+### 🖥️ Why Ollama instead of a cloud AI tool (Copilot / ChatGPT / Cursor)?
 
-- 🔒 **Private** — your code never leaves your machine; no vendor sees it. Ideal for proprietary or regulated codebases where you can't paste code into a cloud tool.
-- 💸 **Free, no limits** — no API key, no per-token bill, no rate limits, no subscription.
-- 📴 **Offline** — works on a plane, in an air-gapped network, anywhere.
-- 🔓 **No lock-in** — swap models freely (`llama3.1`, `qwen2.5-coder`, `deepseek-coder`).
-- ⚖️ **Honest trade-off:** local models are smaller/slower than frontier Claude/GPT — excellent for everyday review/refactor/explain, but reach for a cloud model on the hardest reasoning. pi lets you switch with one flag, so you get both.
+- 🔒 **Private** — your code never leaves your machine. Ideal for proprietary/regulated code you can't paste into a cloud tool.
+- 💸 **Free, no limits** — no key, no per-token bill, no rate limits, no subscription.
+- 📴 **Offline** — works on a plane or air-gapped network.
+- ⚖️ **Honest trade-off** — local models are smaller/slower than frontier Claude/GPT; great for everyday review/refactor, switch to a cloud model (one flag) for the hardest reasoning.
 
-### Run the web app locally
+## 🌐 Web demo
+
+A public-safe slice of pi ([live](https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/)) — or run it yourself:
 
 ```bash
 pip install -r requirements.txt
-streamlit run streamlit_app.py    # opens http://localhost:8501
+streamlit run streamlit_app.py      # http://localhost:8501
 ```
 
-Run locally and the web app can also reach **Ollama** (the hosted demo can't —
-it has no localhost Ollama). Everything else (Groq/OpenRouter/OpenAI/Anthropic)
-works in both.
+- **Bring your own key** — used only for the session; never stored, logged, or committed.
+- **No raw shell** — visitors get `run_command` (read-only allowlist, no network, sandboxed) instead of `run_bash`.
+- **Upload a file, a project `.zip`, or a CSV** — then *review*, *explain the project*, or *analyze the data and make a deck*.
+- **Sandboxed** — file tools + ZIP extraction confined to a fresh per-session temp dir (zip-slip-guarded).
 
-> **Keys never touch the repo.** pi reads them from the environment only — they
-> are never stored or logged, `.env` is gitignored, and `.env.example` holds
-> placeholders only.
+Locally the web app can also reach **Ollama**; the hosted demo can't (no localhost
+Ollama on the cloud server).
 
-## Use
+## 🧩 Architecture
 
-```bash
-# Interactive REPL in the current directory
-pi
-
-# One-shot
-pi "add a docstring to main.py"
-
-# Options
-pi --dir ./myproject          # set the sandbox/working directory
-pi --yes                      # auto-approve mutating tools
-pi --no-shell                 # disable the run_bash tool
-pi --no-stream                # disable streaming
-pi --model gpt-4o-mini        # provider inferred from the model id
-pi --provider openai --model gpt-4o
-pi --provider groq --model llama-3.3-70b-versatile         # free tier
-pi --provider openrouter --model "meta-llama/llama-3.3-70b-instruct:free"
-pi --skills-dir ./skills      # load the bundled skills
-pi --think                    # Anthropic extended thinking (uses extra billed tokens)
+```mermaid
+flowchart LR
+    CLI["💻 CLI / REPL"] --> AG
+    WEB["🌐 Streamlit<br/>(BYO key)"] --> AG
+    AG["🤖 Agent<br/>provider- &amp; UI-agnostic<br/>neutral transcript + retry"]
+    AG --> P["🧠 Providers<br/>Claude · GPT · Groq<br/>OpenRouter · Gemini · Ollama"]
+    AG --> T["🔧 Tools<br/>plan · fs · grep · delegate<br/>run_command · run_bash<br/>analyze_data · make_slides"]
+    AG --> S["📜 Skills<br/>SKILL.md inlined"]
+    T --> SB["🔒 Sandbox<br/>path-confined workspace"]
 ```
-
-REPL commands: `/help`, `/tools`, `/model <id>`, `/think`, `/cost`, `/reset`, `/exit`.
-
-## Architecture
 
 ```
 src/pi_agent/
   config.py        # AgentConfig + system prompt
   sandbox.py       # path-safety boundary (the security choke-point)
-  llm.py           # neutral transcript <-> Anthropic / OpenAI; Usage + cost
-  agent.py         # the tool-use loop (provider- and UI-agnostic)
+  llm.py           # provider registry + neutral transcript ↔ each wire format; usage/cost
+  agent.py         # the tool-use loop: ReAct, retry, delegate (provider/UI-agnostic)
   skills.py        # load SKILL.md files, inline them into the system prompt
+  upload.py        # zip-slip-safe project extraction
   repl.py          # terminal front-end (rich): streaming, /model, /cost, /think
   cli.py           # `pi` entry point
   tools/
-    base.py        # Tool dataclass (neutral tool spec)
-    filesystem.py  # read / write / edit / list
-    shell.py       # run_bash (sandboxed)
-    search.py      # grep
-    registry.py    # holds tools, dispatches calls
+    base.py registry.py        # Tool spec + dispatch
+    planning.py                # update_plan (live todos)
+    filesystem.py search.py    # read/write/edit/list + grep
+    shell.py safe_exec.py      # run_bash (local) + run_command (public-safe)
+    subagent.py                # delegate
+    datasci.py                 # analyze_data + make_slides
 streamlit_app.py   # public web demo (BYO key, no shell, temp sandbox)
-skills/            # write-tests/ · code-review/ · refactor/  (SKILL.md each)
+skills/            # 12 SKILL.md skills
 ```
 
-The agent keeps its transcript in a **provider-neutral** shape
-(`user` / `assistant` / `tool`); each provider translates it to its own wire
-format (Anthropic content blocks vs OpenAI `tool_calls`). That seam is what lets
-the same conversation move between Claude and GPT.
+The agent keeps its transcript **provider-neutral** (`user` / `assistant` /
+`tool`); each provider translates it to its own wire format (Anthropic content
+blocks vs OpenAI `tool_calls`). That single seam is what lets one conversation
+move between Claude, GPT, Groq, OpenRouter, and Ollama — even mid-chat.
 
-## Web demo (Streamlit)
+## 📜 Skills
 
-`streamlit_app.py` is a public-safe slice of pi you can host for free:
-
-- **Bring your own key** — the visitor pastes their Anthropic/OpenAI key; it is
-  used only for that session and **never stored, logged, or committed**.
-- **No raw shell** — `run_bash` is disabled. The agent gets `run_command`
-  instead: a read-only allowlist (`ls/cat/grep/find/…`), no shell features, no
-  network, absolute/parent paths blocked — so visitors can't run commands on the host.
-- **Sandboxed** — file tools (and ZIP uploads, zip-slip-guarded) are confined to a fresh temp directory per session.
-- **Upload a file or project `.zip`** — then ask it to *review* a file or *explain this project*; the agent can `delegate` exploration to a sub-agent.
-
-Run locally:
-
-```bash
-pip install -r requirements.txt
-streamlit run streamlit_app.py
-```
-
-Deploy on **Streamlit Community Cloud**: push to GitHub → [share.streamlit.io](https://share.streamlit.io)
-→ pick this repo, main file `streamlit_app.py` → Deploy. No secrets to configure —
-keys are entered in the UI at runtime.
-
-## Skills
-
-A *skill* is a `SKILL.md` describing how to do one task well. At startup pi inlines
-a skill index + contents into the system prompt, so the model can apply them
-without spending a tool call to read them.
+A *skill* is a `SKILL.md` describing how to do one task well; pi inlines a skill
+index + contents into the system prompt, so the model applies them without
+spending a tool call to read them.
 
 ```
-skills/<name>/SKILL.md   # frontmatter: name, description, trigger + the guidance
+skills/<name>/SKILL.md   # frontmatter (name, description, trigger) + When / How / Avoid / Done-well
 ```
 
-```bash
-pi --skills-dir ./skills "review llm.py"   # CLI loads skills from a directory
-```
+Bundled (12): `planning` · `orchestrate` · `write-tests` · `code-review` ·
+`refactor` · `debug` · `explain-code` · `explain-project` · `architecture` ·
+`write-docs` · `data-analysis` · `make-deck`. Add your own by dropping a new
+folder — no code changes.
 
-Bundled: `planning`, `orchestrate`, `write-tests`, `code-review`, `refactor`,
-`debug`, `explain-code`, `explain-project`, `architecture`, `write-docs`. Add your
-own by dropping a new folder — no code changes.
+## 🛠️ Extending it (the whole point)
 
-## Extending it (the whole point)
-
-**Add a tool** — write a handler and a `Tool`, register it:
+**Add a tool** — write a handler + a `Tool`, register it:
 
 ```python
 Tool(
@@ -226,31 +193,24 @@ Tool(
 ```
 
 **Add a provider** — implement `LLMProvider.complete(...)` (translate the neutral
-transcript, call the API, return an `AssistantResponse`). The agent loop needs no
-changes.
+transcript, call the API, return an `AssistantResponse`). The agent loop is unchanged.
 
-## Testing
+## ✅ Testing
 
 ```bash
-pytest          # uses a scripted fake provider — no API key, no network
+pytest          # 69 tests — scripted fake provider, no API key, no network
 ```
 
-Tests cover the sandbox boundary, every tool, the agent loop (tool execution,
-max-iteration guard, confirmation, events, usage accounting), and the
-**provider translators** (neutral → Anthropic / OpenAI).
+Covers the sandbox boundary, every tool, the agent loop (tool execution,
+max-iteration guard, confirmation, events, usage, retry, delegation), the
+provider translators, and zip-slip safety.
 
-## Notes on cost
-
-`/cost` and the per-turn line show **estimated** USD from an editable price table
-in `llm.py` — treat them as ballpark, not billing. Extended thinking (`--think`)
-spends extra tokens, so it is **off by default**.
-
-## Roadmap
+## 🗺️ Roadmap
 
 - More tools (git, web fetch, apply-patch)
-- OpenAI streaming (Anthropic streams today; OpenAI uses full-response)
-- Skill triggers / auto-selection by relevance
+- OpenAI/Groq streaming (Anthropic streams today)
+- Charts in `analyze_data`; skill auto-selection by relevance
 
 ---
 
-*Built by Ashutosh Sharma.*
+<p align="center"><em>Built by Ashutosh Sharma.</em></p>

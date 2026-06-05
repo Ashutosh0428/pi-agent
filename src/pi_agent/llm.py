@@ -340,6 +340,8 @@ def infer_provider(model: str) -> str:
     """Guess the provider from a model id."""
     if model.startswith(("gpt", "o1", "o3", "o4", "chatgpt")):
         return "openai"
+    if model.startswith("gemini"):
+        return "gemini"
     return "anthropic"
 
 
@@ -377,6 +379,13 @@ PROVIDERS: dict[str, ProviderSpec] = {
         "openrouter", "openai", "meta-llama/llama-3.3-70b-instruct:free",
         "OPENROUTER_API_KEY", "https://openrouter.ai/keys",
         base_url="https://openrouter.ai/api/v1", free=True,
+    ),
+    # Google Gemini exposes an OpenAI-compatible endpoint, so it reuses
+    # OpenAIProvider. Generous free tier; supports tool/function calling.
+    "gemini": ProviderSpec(
+        "gemini", "openai", "gemini-2.0-flash",
+        "GEMINI_API_KEY", "https://aistudio.google.com/apikey",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/", free=True,
     ),
     # Local + private + free: runs against an Ollama server on the same machine.
     # No key needed; only reachable when pi runs locally (not on cloud hosting).
