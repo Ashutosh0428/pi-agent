@@ -344,6 +344,8 @@ def infer_provider(model: str) -> str:
         return "openai"
     if model.startswith("gemini"):
         return "gemini"
+    if model.startswith("glm"):
+        return "glm"
     return "anthropic"
 
 
@@ -403,6 +405,14 @@ PROVIDERS: dict[str, ProviderSpec] = {
         "EURI_API_KEY", "https://docs.euri.ai/",
         base_url="https://api.euron.one/api/v1/euri", free=True,
         models=("gpt-4o-mini", "gpt-4.1-nano"),  # 40+ available — use "list models" for the rest
+    ),
+    # Z.ai / Zhipu GLM — OpenAI-compatible; GLM models support tool calling.
+    # Free model: glm-4.5-flash; GLM-5/5.1 are paid. Real ids come from "list models".
+    "glm": ProviderSpec(
+        "glm", "openai", "glm-4.5-flash",
+        "ZAI_API_KEY", "https://z.ai/manage-apikey/apikey-list",
+        base_url="https://api.z.ai/api/paas/v4",
+        models=("glm-4.5-flash", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.5-air"),
     ),
     # Local + private + free: runs against an Ollama server on the same machine.
     # No key needed; only reachable when pi runs locally (not on cloud hosting).
