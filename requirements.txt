@@ -1,5 +1,5 @@
 # Dependencies for the Streamlit Cloud web demo (streamlit_app.py).
 # Local CLI users should `pip install -e .` instead (see pyproject.toml).
-streamlit>=1.30
+streamlit>=1.32
 anthropic>=0.40
 openai>=1.30
