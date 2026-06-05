@@ -248,7 +248,7 @@ class AnthropicProvider:
             if block.type == "text":
                 text_parts.append(block.text)
             elif block.type == "tool_use":
-                tool_calls.append(ToolCall(id=block.id, name=block.name, args=dict(block.input)))
+                tool_calls.append(ToolCall(id=block.id, name=block.name, args=dict(block.input or {})))
             # "thinking" blocks are intentionally not surfaced to the transcript.
         return "".join(text_parts), tool_calls
 
@@ -311,14 +311,20 @@ class OpenAIProvider:
         )
         choice = response.choices[0]
         message = choice.message
-        tool_calls = [
-            ToolCall(
-                id=tc.id,
-                name=tc.function.name,
-                args=json.loads(tc.function.arguments or "{}"),
+        tool_calls = []
+        for tc in message.tool_calls or []:
+            try:
+                parsed = json.loads(tc.function.arguments or "{}")
+            except (ValueError, TypeError):
+                parsed = {}
+            # Weaker models sometimes emit "null" or a non-object — coerce to {}.
+            tool_calls.append(
+                ToolCall(
+                    id=tc.id,
+                    name=tc.function.name,
+                    args=parsed if isinstance(parsed, dict) else {},
+                )
             )
-            for tc in (message.tool_calls or [])
-        ]
         usage = Usage(0, 0)
         if response.usage is not None:
             usage = Usage(response.usage.prompt_tokens, response.usage.completion_tokens)

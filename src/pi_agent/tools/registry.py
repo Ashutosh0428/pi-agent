@@ -6,6 +6,7 @@ from typing import Any
 
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.base import Tool
+from pi_agent.tools.datasci import data_tools
 from pi_agent.tools.filesystem import filesystem_tools
 from pi_agent.tools.planning import planning_tools
 from pi_agent.tools.safe_exec import safe_command_tools
@@ -58,6 +59,7 @@ def build_default_tools(
     enable_shell: bool = True,
     enable_safe_command: bool = False,
     enable_subagents: bool = False,
+    enable_data: bool = False,
 ) -> ToolRegistry:
     """Assemble the default tool set.
 
@@ -65,7 +67,9 @@ def build_default_tools(
     ``enable_safe_command`` adds the restricted, read-only ``run_command``
     (safe for public/untrusted contexts).
     ``enable_subagents`` adds ``delegate`` (the Agent runs a focused sub-agent
-    sequentially). All three are independent.
+    sequentially).
+    ``enable_data`` adds ``analyze_data`` + ``make_slides`` (need the [data]
+    extra). All are independent.
     """
     tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
@@ -74,4 +78,6 @@ def build_default_tools(
         tools += safe_command_tools()
     if enable_subagents:
         tools += subagent_tools()
+    if enable_data:
+        tools += data_tools()
     return ToolRegistry(tools)

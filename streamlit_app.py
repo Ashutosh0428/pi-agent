@@ -35,14 +35,15 @@ from pi_agent.upload import extract_zip_into_sandbox  # noqa: E402
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 STATUS_ICON = {"done": "✅", "in_progress": "⏳", "pending": "⬜"}
-UPLOAD_TYPES = ["zip", "py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
+UPLOAD_TYPES = ["zip", "csv", "tsv", "xlsx", "py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
+DATA_EXTS = {"csv", "tsv", "xlsx", "json"}
 
 st.set_page_config(page_title="pi-agent — try it", page_icon="🤖", layout="centered")
 
 
-def _fmt_args(args: dict) -> str:
+def _fmt_args(args: dict | None) -> str:
     parts = []
-    for key, value in args.items():
+    for key, value in (args or {}).items():
         text = str(value).replace("\n", " ")
         parts.append(f"{key}={text[:50] + '…' if len(text) > 50 else text}")
     return ", ".join(parts)
@@ -98,7 +99,8 @@ with st.sidebar:
         "“review <file>” or “explain this project”.",
     )
     if uploaded is not None:
-        if uploaded.name.lower().endswith(".zip"):
+        ext = uploaded.name.lower().rsplit(".", 1)[-1]
+        if ext == "zip":
             res = extract_zip_into_sandbox(uploaded.getvalue(), Sandbox(_sandbox_dir()))
             if res.error:
                 st.warning(res.error)
@@ -109,6 +111,16 @@ with st.sidebar:
                 )
                 if res.skipped:
                     st.caption(f"Skipped {len(res.skipped)} (limits / unsafe paths).")
+        elif ext in DATA_EXTS:
+            if uploaded.size > 10_000_000:
+                st.warning("Data file too large (>10 MB).")
+            else:
+                dest = Path(_sandbox_dir()) / Path(uploaded.name).name
+                try:
+                    dest.write_bytes(uploaded.getvalue())
+                    st.success(f"Uploaded **{dest.name}** — ask me to *analyze it* (and make slides).")
+                except OSError:
+                    st.warning("Could not save that file.")
         elif uploaded.size > 200_000:
             st.warning("File too large (>200 KB). Zip it and upload as a project instead.")
         else:
@@ -163,6 +175,7 @@ def _get_agent() -> Agent:
                 enable_shell=False,          # no raw shell on a public app
                 enable_safe_command=True,    # restricted, read-only run_command is safe
                 enable_subagents=True,       # sequential delegate (no recursion)
+                enable_data=True,            # analyze_data + make_slides (fixed/safe)
             ),
             sandbox=Sandbox(_sandbox_dir()),
             config=AgentConfig(
@@ -186,6 +199,18 @@ st.session_state.setdefault("messages", [])
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+
+# Downloadable artifacts the agent produced (e.g. generated .pptx decks).
+_artifacts = sorted(
+    p for p in Path(_sandbox_dir()).glob("*")
+    if p.is_file() and p.suffix.lower() in (".pptx", ".png", ".pdf")
+)
+if _artifacts:
+    with st.expander(f"📥 Downloads ({len(_artifacts)})", expanded=True):
+        for _p in _artifacts:
+            st.download_button(
+                f"⬇ {_p.name}", data=_p.read_bytes(), file_name=_p.name, key=f"dl_{_p.name}"
+            )
 
 # ── Chat turn ────────────────────────────────────────────────────────────────
 prompt = st.chat_input("Ask pi to plan, write, review, or edit code…")
