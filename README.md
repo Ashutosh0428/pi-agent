@@ -49,7 +49,7 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 
 | | |
 |---|---|
-| 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** (free) · **Ollama** (local, no key) — switch mid-chat with `/model` |
+| 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** · **EURI** (free) · **Ollama** (local, no key) — switch mid-chat with `/model` |
 | 📋 **Planner + live todos** | declares a plan via `update_plan`; the web app renders a live ⬜→⏳→✅ checklist |
 | 🤝 **Sub-agents** | `delegate` a focused subtask to a sequential sub-agent (no recursion) for big jobs |
 | 📦 **Project ZIP upload** | drop a zipped repo (zip-slip-safe) → *"explain this project"* (purpose, flow, components) |
@@ -81,6 +81,7 @@ Pick a provider and set its key (env var, or `cp .env.example .env`):
 | Groq | 🆓 free | `export GROQ_API_KEY=...` · [get a key](https://console.groq.com/keys) |
 | OpenRouter | 🆓 free | `export OPENROUTER_API_KEY=...` · [get a key](https://openrouter.ai/keys) |
 | Gemini | 🆓 free + paid | `export GEMINI_API_KEY=...` · [get a key](https://aistudio.google.com/apikey) |
+| EURI | 🆓 free | `export EURI_API_KEY=...` · [get a key](https://docs.euri.ai/) · 40+ models (OpenAI-compatible) |
 | **Ollama** | 🆓 local, no key | install Ollama → `ollama pull llama3.1` (runs at `localhost:11434`) |
 
 **Any model works** — the web app has a per-provider model dropdown (+ a custom

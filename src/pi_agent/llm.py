@@ -393,6 +393,15 @@ PROVIDERS: dict[str, ProviderSpec] = {
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/", free=True,
         models=("gemini-3.5-flash", "gemini-3.1-pro", "gemini-3.1-flash", "gemini-2.5-flash"),
     ),
+    # EURI — OpenAI-compatible aggregator (40+ models) with a free tier. Tool
+    # calling depends on EURI passing `tools` through to a tool-capable model;
+    # use "list models" + try one if the agent doesn't call tools.
+    "euri": ProviderSpec(
+        "euri", "openai", "gpt-4o-mini",
+        "EURI_API_KEY", "https://docs.euri.ai/",
+        base_url="https://api.euron.one/api/v1/euri", free=True,
+        models=("gpt-4o-mini", "gpt-4.1-nano"),  # 40+ available — use "list models" for the rest
+    ),
     # Local + private + free: runs against an Ollama server on the same machine.
     # No key needed; only reachable when pi runs locally (not on cloud hosting).
     "ollama": ProviderSpec(
