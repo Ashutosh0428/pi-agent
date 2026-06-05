@@ -40,6 +40,34 @@ DATA_EXTS = {"csv", "tsv", "xlsx", "json"}
 
 st.set_page_config(page_title="pi-agent — try it", page_icon="🤖", layout="centered")
 
+st.markdown(
+    """
+    <style>
+      #MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
+      .block-container { padding-top: 2.2rem; padding-bottom: 7rem; max-width: 840px; }
+      /* gradient divider under the hero */
+      .hero-rule { height: 3px; border: 0; border-radius: 3px; margin: .4rem 0 1.4rem;
+        background: linear-gradient(90deg, #7c5cff, #22d3ee, transparent); }
+      /* buttons */
+      .stButton button, .stDownloadButton button {
+        border-radius: 10px; border: 1px solid rgba(124,92,255,.4); font-weight: 600;
+        transition: transform .12s ease, border-color .12s ease; }
+      .stButton button:hover, .stDownloadButton button:hover {
+        border-color: #7c5cff; transform: translateY(-1px); }
+      /* chat bubbles + inputs */
+      [data-testid="stChatMessage"] { border-radius: 14px; }
+      [data-baseweb="input"], [data-baseweb="select"], [data-baseweb="textarea"] { border-radius: 10px; }
+      /* sidebar */
+      [data-testid="stSidebar"] { border-right: 1px solid rgba(255,255,255,.06); }
+      /* provider pills */
+      .pill { display:inline-block; padding:.18rem .6rem; margin:.15rem; border-radius:999px;
+        font-size:.78rem; background:rgba(124,92,255,.14); border:1px solid rgba(124,92,255,.3);
+        color:#cdb8ff; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 def _fmt_args(args: dict | None) -> str:
     parts = []
@@ -167,11 +195,29 @@ with st.sidebar:
     st.caption("[Source on GitHub](https://github.com/Ashutosh0428/pi-agent)")
 
 # ── Header ───────────────────────────────────────────────────────────────────
-st.title("🤖 pi-agent")
-st.caption(
-    "A minimal AI coding agent — it **plans**, then reads, writes, and edits files "
-    "in a sandboxed workspace via an LLM tool-use loop. Works with Claude, GPT, "
-    "and **free** models (Groq, OpenRouter). **Bring your own key** and try it."
+st.markdown(
+    """
+    <div style="text-align:center;">
+      <div style="font-size:2.6rem; font-weight:800; letter-spacing:-.5px;
+           background:linear-gradient(90deg,#7c5cff,#22d3ee);
+           -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+        🤖 pi-agent
+      </div>
+      <div style="color:#9aa0aa; font-size:.97rem; margin-top:.3rem;">
+        A transparent AI coding agent — it <b>plans</b>, runs tools, and explains
+        code &amp; data in a sandboxed workspace. Bring your own key (free options too).
+      </div>
+      <div style="margin-top:.7rem;">
+        <span class="pill">🧠 8 providers</span>
+        <span class="pill">📋 planner</span>
+        <span class="pill">🤝 sub-agents</span>
+        <span class="pill">📊 data → slides</span>
+        <span class="pill">🔒 sandboxed</span>
+      </div>
+    </div>
+    <hr class="hero-rule"/>
+    """,
+    unsafe_allow_html=True,
 )
 
 if spec.requires_key and not api_key:
