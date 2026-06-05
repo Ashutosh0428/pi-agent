@@ -116,6 +116,21 @@ class TestAgentLoop:
         assert agent.total_usage.output_tokens == 8
         assert agent.total_usage.total_tokens == 26
 
+    def test_plan_event_emitted_for_update_plan(self, tmp_path):
+        provider = FakeProvider([
+            _tool_step(
+                "planning",
+                ToolCall("p1", "update_plan", {"steps": [{"step": "do it", "status": "in_progress"}]}),
+            ),
+            _final_step("done"),
+        ])
+        agent = _make_agent(provider, tmp_path)
+        events = []
+        agent.on_event = lambda kind, payload: events.append((kind, payload))
+        agent.run("x")
+        plans = [p for k, p in events if k == "plan"]
+        assert plans and plans[0][0]["step"] == "do it"
+
     def test_neutral_transcript_shape(self, tmp_path):
         provider = FakeProvider([
             _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),

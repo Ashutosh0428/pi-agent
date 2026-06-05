@@ -8,16 +8,13 @@ import sys
 
 from pi_agent.agent import Agent
 from pi_agent.config import AgentConfig
-from pi_agent.llm import build_provider, infer_provider
+from pi_agent.llm import PROVIDERS, build_provider, infer_provider
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.registry import build_default_tools
 
 # Which environment variable holds the key for each provider. The key itself is
 # never read, printed, or stored by pi — the vendor SDK reads it from the env.
-PROVIDER_ENV_KEY = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-}
+PROVIDER_ENV_KEY = {name: spec.key_env for name, spec in PROVIDERS.items()}
 
 
 def main(argv: list[str] | None = None) -> int:

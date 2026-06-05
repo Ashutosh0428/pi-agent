@@ -123,6 +123,8 @@ class Agent:
             results: list[ToolResult] = []
             for call in response.tool_calls:
                 self._emit("tool_call", call)
+                if call.name == "update_plan":
+                    self._emit("plan", call.args.get("steps", []))
                 if self._should_run(call):
                     output = self.registry.run(call.name, call.args, self.sandbox)
                 else:

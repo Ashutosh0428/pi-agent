@@ -90,6 +90,8 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
 
 def estimate_cost(model: str, usage: Usage) -> float | None:
     """Rough USD cost for ``usage`` on ``model``; ``None`` if price unknown."""
+    if ":free" in model:  # OpenRouter free models
+        return 0.0
     for key, (in_price, out_price) in MODEL_PRICING.items():
         if key in model:
             return (
@@ -333,6 +335,43 @@ def infer_provider(model: str) -> str:
     return "anthropic"
 
 
+@dataclass(frozen=True)
+class ProviderSpec:
+    """Static facts about a provider, used to build it and to drive the UI."""
+
+    name: str
+    kind: str             # "anthropic" or "openai" (which client to use)
+    default_model: str
+    key_env: str          # environment variable holding the key
+    key_url: str          # where a user gets a key
+    base_url: str | None = None   # OpenAI-compatible endpoint (Groq / OpenRouter)
+    free: bool = False    # has a usable free tier (no credit card)
+
+
+# Groq and OpenRouter are OpenAI-compatible, so they reuse OpenAIProvider with a
+# base_url — no new client code. Both offer free keys + strong free models.
+PROVIDERS: dict[str, ProviderSpec] = {
+    "anthropic": ProviderSpec(
+        "anthropic", "anthropic", "claude-sonnet-4-6",
+        "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys",
+    ),
+    "openai": ProviderSpec(
+        "openai", "openai", "gpt-4o-mini",
+        "OPENAI_API_KEY", "https://platform.openai.com/api-keys",
+    ),
+    "groq": ProviderSpec(
+        "groq", "openai", "llama-3.3-70b-versatile",
+        "GROQ_API_KEY", "https://console.groq.com/keys",
+        base_url="https://api.groq.com/openai/v1", free=True,
+    ),
+    "openrouter": ProviderSpec(
+        "openrouter", "openai", "meta-llama/llama-3.3-70b-instruct:free",
+        "OPENROUTER_API_KEY", "https://openrouter.ai/keys",
+        base_url="https://openrouter.ai/api/v1", free=True,
+    ),
+}
+
+
 def build_provider(
     model: str,
     provider: str | None = None,
@@ -349,8 +388,12 @@ def build_provider(
     environment. The key is never stored or logged by pi.
     """
     chosen = provider or infer_provider(model)
-    if chosen == "openai":
-        return OpenAIProvider(model=model, api_key=api_key)
+    spec = PROVIDERS.get(chosen)
+    kind = spec.kind if spec else ("openai" if chosen == "openai" else "anthropic")
+    base_url = spec.base_url if spec else None
+
+    if kind == "openai":
+        return OpenAIProvider(model=model, api_key=api_key, base_url=base_url)
     return AnthropicProvider(
         model=model,
         max_tokens=max_tokens,

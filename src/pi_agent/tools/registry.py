@@ -7,6 +7,7 @@ from typing import Any
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.base import Tool
 from pi_agent.tools.filesystem import filesystem_tools
+from pi_agent.tools.planning import planning_tools
 from pi_agent.tools.search import search_tools
 from pi_agent.tools.shell import shell_tools
 
@@ -45,7 +46,7 @@ class ToolRegistry:
 
 def build_default_tools(enable_shell: bool = True) -> ToolRegistry:
     """Assemble the default tool set. Shell is optional for safe hosting."""
-    tools = [*filesystem_tools(), *search_tools()]
+    tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
         tools += shell_tools()
     return ToolRegistry(tools)

@@ -24,30 +24,49 @@ you ──prompt──► pi ──► LLM decides ──► calls tools (read/w
 ```
 
 - **ReAct tool-use loop** — the model plans, calls tools, observes results, repeats.
-- **Multi-provider** — Anthropic **Claude** and **OpenAI GPT** behind one
-  interface; switch models *mid-conversation* with `/model` (the transcript is
-  provider-neutral, so it carries across).
+- **Planner + live todos** — the model declares a step plan via the `update_plan`
+  tool; the web app renders it as a live checklist (⬜→⏳→✅), Claude-Code style.
+- **Multi-provider, incl. free** — **Claude**, **GPT**, and free tiers **Groq**
+  (`llama-3.3-70b`) and **OpenRouter** (`…:free`) behind one interface; switch
+  models *mid-conversation* with `/model` (the transcript is provider-neutral).
 - **Streaming** — text streams token-by-token in the REPL (Anthropic).
 - **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
 - **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
-- **Tools:** `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`, `run_bash`.
+- **Tools:** `update_plan`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`, `run_bash`.
 - **Skills** — drop a `SKILL.md` in `skills/<name>/` and its guidance is inlined
-  into the system prompt (index + contents), AIOP-style. Ships with `write-tests`,
-  `code-review`, `refactor`.
-- **Web demo** — a sandboxed, bring-your-own-key Streamlit app (`streamlit_app.py`).
+  into the system prompt (index + contents), AIOP-style. Ships with `planning`,
+  `write-tests`, `code-review`, `refactor`, `debug`, `explain-code`, `write-docs`.
+- **Web demo** — sandboxed, bring-your-own-key Streamlit app with file upload and
+  free-model support (`streamlit_app.py`).
 - **Sandboxed:** every path is confined to the working directory; no `../` escapes.
 - **Safe by default:** confirms before mutating tools (write/edit/bash) unless `--yes`.
+
+## What you can do (and why it's useful)
+
+| You ask… | pi does | why it helps |
+|---|---|---|
+| *"write a function that parses a CSV, save to `csv.py`, add a test"* | plans → `write_file` → `write_file` | scaffolds working code + tests in one go |
+| *"review `<uploaded file>`"* | reads it → returns prioritised findings | a second pair of eyes, on your own key |
+| *"there's a bug in `x.py`, the output is wrong — fix it"* | reads, diagnoses root cause, `edit_file` | fixes the cause, not the symptom |
+| *"refactor `y.py` to be simpler, don't change behaviour"* | small, safe `edit_file`s | cleanup without regressions |
+| *"explain what `z.py` does"* | reads + walks the logic | onboard to unfamiliar code fast |
+
+It's a **transparent** agent: you see the plan, every tool call, and the token
+cost — nothing hidden. Try it free with a Groq/OpenRouter key, then point it at
+your own code (locally, with shell + full tools enabled).
 
 ## Install
 
 ```bash
 pip install -e .              # Anthropic + core
-pip install -e ".[openai]"    # add OpenAI support
+pip install -e ".[openai]"    # add OpenAI / Groq / OpenRouter (all OpenAI-compatible)
 
 cp .env.example .env          # then fill in your key(s)
 export ANTHROPIC_API_KEY=sk-ant-...
-# or, for GPT models:
 export OPENAI_API_KEY=sk-...
+# free tiers (no credit card):
+export GROQ_API_KEY=...         # https://console.groq.com/keys
+export OPENROUTER_API_KEY=...   # https://openrouter.ai/keys
 ```
 
 > **Keys never touch the repo.** pi reads them from the environment only — they
@@ -70,6 +89,9 @@ pi --no-shell                 # disable the run_bash tool
 pi --no-stream                # disable streaming
 pi --model gpt-4o-mini        # provider inferred from the model id
 pi --provider openai --model gpt-4o
+pi --provider groq --model llama-3.3-70b-versatile         # free tier
+pi --provider openrouter --model "meta-llama/llama-3.3-70b-instruct:free"
+pi --skills-dir ./skills      # load the bundled skills
 pi --think                    # Anthropic extended thinking (uses extra billed tokens)
 ```
 
@@ -135,8 +157,8 @@ skills/<name>/SKILL.md   # frontmatter: name, description, trigger + the guidanc
 pi --skills-dir ./skills "review llm.py"   # CLI loads skills from a directory
 ```
 
-Bundled: `write-tests`, `code-review`, `refactor`. Add your own by dropping a new
-folder — no code changes.
+Bundled: `planning`, `write-tests`, `code-review`, `refactor`, `debug`,
+`explain-code`, `write-docs`. Add your own by dropping a new folder — no code changes.
 
 ## Extending it (the whole point)
 

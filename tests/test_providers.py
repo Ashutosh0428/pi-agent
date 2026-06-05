@@ -7,6 +7,7 @@ format, which is what makes pi genuinely multi-provider.
 from __future__ import annotations
 
 from pi_agent.llm import (
+    PROVIDERS,
     ToolCall,
     ToolResult,
     Usage,
@@ -109,3 +110,22 @@ class TestCost:
 
     def test_unknown_model_returns_none(self):
         assert estimate_cost("some-local-model", Usage(100, 100)) is None
+
+    def test_free_model_is_zero(self):
+        assert estimate_cost("meta-llama/llama-3.3-70b-instruct:free", Usage(100, 100)) == 0.0
+
+
+class TestProviderRegistry:
+    def test_free_tiers_present(self):
+        assert PROVIDERS["groq"].free is True
+        assert PROVIDERS["openrouter"].free is True
+        assert PROVIDERS["groq"].base_url.endswith("/openai/v1")
+        assert PROVIDERS["openrouter"].kind == "openai"
+
+    def test_paid_providers_have_no_base_url(self):
+        assert PROVIDERS["anthropic"].free is False
+        assert PROVIDERS["anthropic"].base_url is None
+        assert PROVIDERS["openai"].base_url is None
+
+    def test_every_provider_has_a_key_env(self):
+        assert all(s.key_env for s in PROVIDERS.values())
