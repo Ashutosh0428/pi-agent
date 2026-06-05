@@ -1,14 +1,23 @@
 ---
 name: refactor
-description: Refactor code safely without changing behaviour.
+description: Restructure code without changing its behaviour.
 trigger: when the user asks to refactor, clean up, or simplify code
 ---
-When refactoring:
+## When to use
+The user wants code cleaner / simpler / restructured, with the same observable
+behaviour.
 
-1. Read the file and, if present, its tests first.
-2. Preserve behaviour — a refactor must not change observable output.
-3. Make one focused change at a time with `edit_file` using an exact, unique
-   old_string; do not rewrite unrelated code.
-4. Keep names and style consistent with the surrounding code.
-5. If tests exist, suggest running them after each change.
-6. End with a one-line summary of what changed and why it's safe.
+## How
+1. Read the file and its tests first.
+2. Make one focused change at a time with `edit_file` (exact, unique old_string).
+3. Preserve behaviour — outputs must not change. Keep names and style consistent.
+4. Suggest running the tests after each change.
+
+## Avoid
+- Behaviour changes smuggled into a "refactor".
+- Rewriting unrelated code.
+- Big-bang rewrites instead of small, safe steps.
+
+## Done well
+The code reads better, the tests still pass, and you can state in one line why
+each change is behaviour-preserving.

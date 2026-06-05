@@ -3,11 +3,22 @@ name: explain-code
 description: Explain what code does, clearly and at the right level.
 trigger: when the user asks what code does or how it works
 ---
-When explaining code:
+## When to use
+The user asks "what does this do / how does it work" about a file or function.
 
-1. `read_file` the code first.
-2. Start with a one-sentence summary of what it does and why it exists.
-3. Then walk the important parts in order — inputs, key logic, outputs.
-4. Call out anything surprising, risky, or non-obvious (edge cases, side effects).
-5. Keep it concrete and tied to the actual code; skip generic theory.
-6. Don't modify the file unless asked.
+## How
+1. `read_file` it first.
+2. Give a one-sentence summary of its purpose, then walk inputs → key logic →
+   outputs.
+3. Call out the surprising or risky bits (edge cases, side effects) — not the
+   obvious lines.
+4. Tie every point to the actual code.
+
+## Avoid
+- Generic theory not tied to the code in front of you.
+- Narrating every line; focus on what matters.
+- Editing the file unless asked.
+
+## Done well
+Someone unfamiliar understands what the code does and why, plus the gotchas — in
+a couple of short paragraphs.
