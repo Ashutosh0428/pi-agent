@@ -83,14 +83,16 @@ Pick a provider and set its key (env var, or `cp .env.example .env`):
 | Gemini | 🆓 free + paid | `export GEMINI_API_KEY=...` · [get a key](https://aistudio.google.com/apikey) |
 | **Ollama** | 🆓 local, no key | install Ollama → `ollama pull llama3.1` (runs at `localhost:11434`) |
 
-**Any model works** — `--model` takes any id the provider offers, free or paid:
-`gemini-2.0-flash` (free) / `gemini-2.5-pro` (paid), `gpt-4o-mini` / `gpt-4o`,
-`claude-haiku-…` / `claude-opus-…`, `llama-3.3-70b-versatile`, etc.
+**Any model works** — the web app has a per-provider model dropdown (+ a custom
+field), and `--model` takes any id the provider offers, free or paid:
+`gemini-3.5-flash` (free) / `gemini-3.1-pro` (paid), `gpt-4o-mini` / `gpt-4o`,
+`claude-sonnet-4-6` / `claude-opus-4-8`, `llama-3.3-70b-versatile`, etc.
 
 ```bash
 pi                                                          # interactive REPL (defaults to Claude)
 pi --provider groq --model llama-3.3-70b-versatile "explain this repo"
-pi --provider gemini --model gemini-2.0-flash "summarise what this project does"
+pi --provider gemini --model gemini-3.5-flash "summarise what this project does"  # free
+pi --provider gemini --model gemini-3.1-pro  "deep-review this module"             # paid (student Pro)
 pi --provider ollama --model qwen2.5-coder:7b "write a string-reverse fn and a test"
 pi --skills-dir ./skills "review src/pi_agent/llm.py"
 pi --no-shell                                               # safe mode (disable run_bash)

@@ -357,6 +357,7 @@ class ProviderSpec:
     base_url: str | None = None   # OpenAI-compatible endpoint (Groq / OpenRouter / Ollama)
     free: bool = False    # has a usable free tier (no credit card)
     requires_key: bool = True     # Ollama (local) needs no key
+    models: tuple[str, ...] = ()  # suggested model ids for the UI picker (any id still works)
 
 
 # Groq and OpenRouter are OpenAI-compatible, so they reuse OpenAIProvider with a
@@ -365,34 +366,40 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         "anthropic", "anthropic", "claude-sonnet-4-6",
         "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys",
+        models=("claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"),
     ),
     "openai": ProviderSpec(
         "openai", "openai", "gpt-4o-mini",
         "OPENAI_API_KEY", "https://platform.openai.com/api-keys",
+        models=("gpt-4o-mini", "gpt-4o", "gpt-4.1", "o4-mini"),
     ),
     "groq": ProviderSpec(
         "groq", "openai", "llama-3.3-70b-versatile",
         "GROQ_API_KEY", "https://console.groq.com/keys",
         base_url="https://api.groq.com/openai/v1", free=True,
+        models=("llama-3.3-70b-versatile", "llama-3.1-8b-instant"),
     ),
     "openrouter": ProviderSpec(
         "openrouter", "openai", "meta-llama/llama-3.3-70b-instruct:free",
         "OPENROUTER_API_KEY", "https://openrouter.ai/keys",
         base_url="https://openrouter.ai/api/v1", free=True,
+        models=("meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat"),
     ),
     # Google Gemini exposes an OpenAI-compatible endpoint, so it reuses
-    # OpenAIProvider. Generous free tier; supports tool/function calling.
+    # OpenAIProvider. Free tier + paid (Pro) models; supports function calling.
     "gemini": ProviderSpec(
-        "gemini", "openai", "gemini-2.0-flash",
+        "gemini", "openai", "gemini-3.5-flash",
         "GEMINI_API_KEY", "https://aistudio.google.com/apikey",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/", free=True,
+        models=("gemini-3.5-flash", "gemini-3.1-pro", "gemini-3.1-flash", "gemini-2.5-flash"),
     ),
     # Local + private + free: runs against an Ollama server on the same machine.
     # No key needed; only reachable when pi runs locally (not on cloud hosting).
     "ollama": ProviderSpec(
-        "ollama", "openai", "llama3.1",
+        "ollama", "openai", "qwen2.5-coder:7b",
         "OLLAMA_API_KEY", "https://ollama.com/download",
         base_url="http://localhost:11434/v1", free=True, requires_key=False,
+        models=("qwen2.5-coder:7b", "llama3.1", "deepseek-coder"),
     ),
 }
 

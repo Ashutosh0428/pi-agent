@@ -75,7 +75,13 @@ with st.sidebar:
         format_func=lambda p: f"{p.title()}  🆓" if PROVIDERS[p].free else p.title(),
     )
     spec = PROVIDERS[provider]
-    model = st.text_input("Model", value=spec.default_model)
+    _CUSTOM = "✏️ custom…"
+    _picked = st.selectbox("Model", [*spec.models, _CUSTOM], index=0)
+    model = (
+        st.text_input("Custom model id", value=spec.default_model)
+        if _picked == _CUSTOM
+        else _picked
+    )
     api_key = st.text_input(
         f"{provider.title()} API key",
         type="password",
