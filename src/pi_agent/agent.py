@@ -9,19 +9,20 @@ This is the heart of pi: a ReAct-style tool-use loop.
    │        │
    │   tool calls?
    │        ▼
-   │   run each tool (with optional confirmation)
+   │   run each tool (with optional confirmation / sub-agent delegation)
    │        ▼
    └── feed results back to the LLM   (repeat, up to max_iterations)
 
 The loop is provider-agnostic (talks to :class:`LLMProvider`) and UI-agnostic
-(emits events via a callback). It keeps the transcript in a **neutral** shape
-— ``user`` / ``assistant`` / ``tool`` entries — so the same conversation can be
-handed to any provider, even switching models mid-session.
+(emits events via a callback). It keeps the transcript in a **neutral** shape so
+the same conversation can be handed to any provider. Transient model errors are
+retried with backoff; the model may also ``delegate`` a subtask to a sub-agent.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from pi_agent.config import AgentConfig
@@ -36,13 +37,25 @@ from pi_agent.llm import (
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.registry import ToolRegistry
 
-# UI hooks ------------------------------------------------------------------
-# on_event(kind, payload): kind in {"assistant_text", "assistant_delta",
-#   "tool_call", "tool_result", "usage", "info"}.
-# confirm(tool_call) -> bool, asked before a mutating tool runs (unless
-# auto_approve).
 EventCallback = Callable[[str, Any], None]
 ConfirmCallback = Callable[[ToolCall], bool]
+
+# 4xx (except 408/409/429) are permanent — retrying wastes tokens. Everything
+# else (429, 5xx, timeouts, dropped connections) is worth retrying.
+_PERMANENT_CODES = {400, 401, 403, 404, 422}
+_TRANSIENT_NAME_HINTS = (
+    "ratelimit", "timeout", "connection", "overloaded",
+    "serviceunavailable", "internalserver", "apistatus",
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Decide whether a model-call error is worth retrying."""
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code not in _PERMANENT_CODES and (code in (408, 409, 429) or code >= 500)
+    name = type(exc).__name__.lower()
+    return any(hint in name for hint in _TRANSIENT_NAME_HINTS)
 
 
 @dataclass
@@ -73,8 +86,25 @@ class Agent:
             return True
         return self.confirm(call)
 
+    def _with_retry(self, fn: Callable[[], Any]) -> Any:
+        """Call ``fn``; retry transient errors up to ``config.max_retries``."""
+        attempt = 0
+        while True:
+            try:
+                return fn()
+            except Exception as exc:
+                attempt += 1
+                if attempt > self.config.max_retries or not _is_transient(exc):
+                    raise
+                self._emit(
+                    "info",
+                    f"Transient error ({type(exc).__name__}); "
+                    f"retrying {attempt}/{self.config.max_retries}…",
+                )
+                time.sleep(min(2 ** (attempt - 1), 16))
+
     def _ask(self, tools: list[dict[str, Any]]) -> tuple[AssistantResponse, bool]:
-        """One model turn. Returns (response, streamed?)."""
+        """One model turn (with retry). Returns (response, streamed?)."""
         can_stream = (
             self.config.stream
             and getattr(self.provider, "supports_streaming", False)
@@ -82,17 +112,38 @@ class Agent:
             and self.on_event is not None
         )
         if can_stream:
-            response = self.provider.stream(  # type: ignore[attr-defined]
-                self.config.system_prompt,
-                self.messages,
-                tools,
-                lambda delta: self._emit("assistant_delta", delta),
+            response = self._with_retry(
+                lambda: self.provider.stream(  # type: ignore[attr-defined]
+                    self.config.system_prompt,
+                    self.messages,
+                    tools,
+                    lambda delta: self._emit("assistant_delta", delta),
+                )
             )
             return response, True
-        response = self.provider.complete(
-            self.config.system_prompt, self.messages, tools
+        response = self._with_retry(
+            lambda: self.provider.complete(self.config.system_prompt, self.messages, tools)
         )
         return response, False
+
+    def _run_subagent(self, args: dict[str, Any]) -> str:
+        """Run a focused sub-agent to completion on the same workspace."""
+        task = (args.get("task") or "").strip()
+        if not task:
+            return "Error: 'task' is required for delegate."
+        self._emit("info", f"🤝 delegating to sub-agent: {task[:100]}")
+        sub = Agent(
+            provider=self.provider,
+            registry=self.registry.without("delegate"),  # no recursive delegation
+            sandbox=self.sandbox,
+            config=replace(self.config, max_iterations=min(self.config.max_iterations, 12)),
+        )
+        try:
+            result = sub.run(task)
+        except Exception as exc:  # report failure back to the parent, don't crash
+            return f"Sub-agent failed: {type(exc).__name__}."
+        self.total_usage += sub.total_usage
+        return result or "(sub-agent returned no text)"
 
     def run(self, user_input: str) -> str:
         """Process one user turn; returns the final assistant text."""
@@ -113,7 +164,6 @@ class Agent:
                 }
             )
 
-            # In streaming mode the text was already delivered via deltas.
             if response.text and not streamed:
                 self._emit("assistant_text", response.text)
 
@@ -125,10 +175,14 @@ class Agent:
                 self._emit("tool_call", call)
                 if call.name == "update_plan":
                     self._emit("plan", call.args.get("steps", []))
-                if self._should_run(call):
+
+                if call.name == "delegate":
+                    output = self._run_subagent(call.args)
+                elif self._should_run(call):
                     output = self.registry.run(call.name, call.args, self.sandbox)
                 else:
                     output = "Skipped by user."
+
                 self._emit("tool_result", {"call": call, "output": output})
                 results.append(ToolResult(id=call.id, name=call.name, output=output))
 

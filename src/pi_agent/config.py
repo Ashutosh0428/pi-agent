@@ -39,6 +39,7 @@ class AgentConfig:
     stream: bool = True               # stream text deltas when the provider can
     thinking: bool = False            # Anthropic extended thinking (opt-in, billed)
     thinking_budget: int = 2048       # thinking tokens when enabled
+    max_retries: int = 5              # retry transient model errors (rate limit, 5xx, timeout)
 
     @classmethod
     def from_env(cls) -> "AgentConfig":

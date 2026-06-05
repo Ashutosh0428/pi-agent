@@ -31,10 +31,11 @@ from pi_agent.llm import PROVIDERS, Usage, build_provider, estimate_cost  # noqa
 from pi_agent.sandbox import Sandbox  # noqa: E402
 from pi_agent.skills import build_system_prompt, load_skills  # noqa: E402
 from pi_agent.tools.registry import build_default_tools  # noqa: E402
+from pi_agent.upload import extract_zip_into_sandbox  # noqa: E402
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 STATUS_ICON = {"done": "✅", "in_progress": "⏳", "pending": "⬜"}
-UPLOAD_TYPES = ["py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
+UPLOAD_TYPES = ["zip", "py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
 
 st.set_page_config(page_title="pi-agent — try it", page_icon="🤖", layout="centered")
 
@@ -80,18 +81,36 @@ with st.sidebar:
         help="Used only for this session. Never stored, logged, or sent anywhere "
         "except the model provider.",
     )
-    free_note = " — 🆓 free, no credit card" if spec.free else ""
-    st.caption(f"[Get a {provider.title()} key →]({spec.key_url}){free_note}")
+    if spec.requires_key:
+        free_note = " — 🆓 free, no credit card" if spec.free else ""
+        st.caption(f"[Get a {provider.title()} key →]({spec.key_url}){free_note}")
+    else:
+        st.caption(
+            "🖥️ Local & free — runs against Ollama at localhost:11434 "
+            "(works when you run this app locally, not on the hosted demo)."
+        )
 
     use_skills = st.toggle("Use skills (plan, tests, review, debug, …)", value=True)
 
     uploaded = st.file_uploader(
-        "📎 Upload a file to review", type=UPLOAD_TYPES,
-        help="Lands in the sandbox; then ask: “review <filename>”.",
+        "📎 Upload a file or project .zip", type=UPLOAD_TYPES,
+        help="A file (or a zipped project) lands in the sandbox; then ask "
+        "“review <file>” or “explain this project”.",
     )
     if uploaded is not None:
-        if uploaded.size > 200_000:
-            st.warning("File too large (>200 KB).")
+        if uploaded.name.lower().endswith(".zip"):
+            res = extract_zip_into_sandbox(uploaded.getvalue(), Sandbox(_sandbox_dir()))
+            if res.error:
+                st.warning(res.error)
+            else:
+                st.success(
+                    f"Extracted **{len(res.extracted)}** files — ask me to "
+                    "*explain this project*."
+                )
+                if res.skipped:
+                    st.caption(f"Skipped {len(res.skipped)} (limits / unsafe paths).")
+        elif uploaded.size > 200_000:
+            st.warning("File too large (>200 KB). Zip it and upload as a project instead.")
         else:
             dest = Path(_sandbox_dir()) / Path(uploaded.name).name  # strip any path
             try:
@@ -120,12 +139,13 @@ st.caption(
     "and **free** models (Groq, OpenRouter). **Bring your own key** and try it."
 )
 
-if not api_key:
+if spec.requires_key and not api_key:
     st.info(
         "👈 Pick a provider and paste an API key to start. "
         "**No paid key?** Choose **Groq** or **OpenRouter** (🆓) — free key, no card. "
         "Then ask, e.g., *“write a Python function that reverses a string, save it to "
-        "utils.py, then add a test.”*"
+        "utils.py, then add a test.”* Or upload a project **.zip** and ask me to "
+        "*explain this project*."
     )
     st.stop()
 
@@ -142,6 +162,7 @@ def _get_agent() -> Agent:
             registry=build_default_tools(
                 enable_shell=False,          # no raw shell on a public app
                 enable_safe_command=True,    # restricted, read-only run_command is safe
+                enable_subagents=True,       # sequential delegate (no recursion)
             ),
             sandbox=Sandbox(_sandbox_dir()),
             config=AgentConfig(

@@ -11,6 +11,7 @@ from pi_agent.tools.planning import planning_tools
 from pi_agent.tools.safe_exec import safe_command_tools
 from pi_agent.tools.search import search_tools
 from pi_agent.tools.shell import shell_tools
+from pi_agent.tools.subagent import subagent_tools
 
 
 class ToolRegistry:
@@ -30,6 +31,14 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return list(self._tools)
 
+    def without(self, name: str) -> "ToolRegistry":
+        """Return a copy of this registry with ``name`` removed.
+
+        Used to build a sub-agent's tools without ``delegate``, so sub-agents
+        cannot recursively spawn more sub-agents (depth is capped at one).
+        """
+        return ToolRegistry([t for t in self._tools.values() if t.name != name])
+
     def run(self, name: str, args: dict[str, Any], sandbox: Sandbox) -> str:
         """Execute a tool by name, converting any error into a string result.
 
@@ -46,17 +55,23 @@ class ToolRegistry:
 
 
 def build_default_tools(
-    enable_shell: bool = True, enable_safe_command: bool = False
+    enable_shell: bool = True,
+    enable_safe_command: bool = False,
+    enable_subagents: bool = False,
 ) -> ToolRegistry:
     """Assemble the default tool set.
 
     ``enable_shell`` adds the full ``run_bash`` (local/trusted use only).
     ``enable_safe_command`` adds the restricted, read-only ``run_command``
-    (safe for public/untrusted contexts). They are independent.
+    (safe for public/untrusted contexts).
+    ``enable_subagents`` adds ``delegate`` (the Agent runs a focused sub-agent
+    sequentially). All three are independent.
     """
     tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
         tools += shell_tools()
     if enable_safe_command:
         tools += safe_command_tools()
+    if enable_subagents:
+        tools += subagent_tools()
     return ToolRegistry(tools)

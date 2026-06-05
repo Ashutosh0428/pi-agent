@@ -26,17 +26,24 @@ you ──prompt──► pi ──► LLM decides ──► calls tools (read/w
 - **ReAct tool-use loop** — the model plans, calls tools, observes results, repeats.
 - **Planner + live todos** — the model declares a step plan via the `update_plan`
   tool; the web app renders it as a live checklist (⬜→⏳→✅), Claude-Code style.
-- **Multi-provider, incl. free** — **Claude**, **GPT**, and free tiers **Groq**
-  (`llama-3.3-70b`) and **OpenRouter** (`…:free`) behind one interface; switch
-  models *mid-conversation* with `/model` (the transcript is provider-neutral).
+- **Multi-provider — paid, free & local** — **Claude**, **GPT**, free tiers
+  **Groq** / **OpenRouter**, and **Ollama** (local, no key) behind one interface;
+  switch models *mid-conversation* with `/model` (the transcript is provider-neutral).
+- **Project ZIP upload** — drop a zipped repo into the web app (zip-slip-safe)
+  and ask it to *explain the project* — purpose, end-to-end flow, components.
+- **Sub-agents** — the agent can `delegate` a focused subtask to a sequential
+  sub-agent (one level deep, no recursion) for large jobs.
+- **Resilient** — transient model errors (rate-limit, 5xx, timeout) auto-retry
+  up to 5× with backoff; permanent errors (bad key/request) fail fast.
 - **Streaming** — text streams token-by-token in the REPL (Anthropic).
 - **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
 - **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
-- **Tools:** `update_plan`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`,
+- **Tools:** `update_plan`, `delegate`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`,
   `run_command` (restricted, read-only — safe for the public web app), `run_bash` (full shell, local only).
 - **Skills** — drop a `SKILL.md` in `skills/<name>/` and its guidance is inlined
   into the system prompt (index + contents), AIOP-style. Ships with `planning`,
-  `write-tests`, `code-review`, `refactor`, `debug`, `explain-code`, `write-docs`.
+  `orchestrate`, `write-tests`, `code-review`, `refactor`, `debug`, `explain-code`,
+  `explain-project`, `architecture`, `write-docs`.
 - **Web demo** — sandboxed, bring-your-own-key Streamlit app with file upload and
   free-model support (`streamlit_app.py`).
 - **Sandboxed:** every path is confined to the working directory; no `../` escapes.
@@ -56,19 +63,59 @@ It's a **transparent** agent: you see the plan, every tool call, and the token
 cost — nothing hidden. Try it free with a Groq/OpenRouter key, then point it at
 your own code (locally, with shell + full tools enabled).
 
-## Install
+## Run it locally
 
 ```bash
-pip install -e .              # Anthropic + core
-pip install -e ".[openai]"    # add OpenAI / Groq / OpenRouter (all OpenAI-compatible)
-
-cp .env.example .env          # then fill in your key(s)
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
-# free tiers (no credit card):
-export GROQ_API_KEY=...         # https://console.groq.com/keys
-export OPENROUTER_API_KEY=...   # https://openrouter.ai/keys
+git clone https://github.com/Ashutosh0428/pi-agent && cd pi-agent
+pip install -e ".[openai]"   # core + OpenAI / Groq / OpenRouter / Ollama (all OpenAI-compatible)
 ```
+
+Pick a provider and set its key (env var, or `cp .env.example .env` and fill it in):
+
+| Provider | Cost | Setup |
+|---|---|---|
+| Anthropic | paid | `export ANTHROPIC_API_KEY=sk-ant-...` |
+| OpenAI | paid | `export OPENAI_API_KEY=sk-...` |
+| Groq | 🆓 free | `export GROQ_API_KEY=...` · [get a key](https://console.groq.com/keys) |
+| OpenRouter | 🆓 free | `export OPENROUTER_API_KEY=...` · [get a key](https://openrouter.ai/keys) |
+| **Ollama** | 🆓 local, no key | install Ollama → `ollama pull llama3.1` (runs at `localhost:11434`) |
+
+### Run the CLI
+
+```bash
+pi                                                          # interactive REPL (defaults to Claude)
+pi --provider groq --model llama-3.3-70b-versatile "explain this repo"
+pi --skills-dir ./skills "review src/pi_agent/llm.py"
+pi --no-shell                                               # safe mode (disable run_bash)
+```
+
+### Ollama — fully local, private, free, no key
+
+```bash
+# 1. install from https://ollama.com/download
+ollama pull qwen2.5-coder:7b      # or llama3.1 — coder models are better at tools
+ollama serve                      # usually already running in the background
+pi --provider ollama --model qwen2.5-coder:7b "write a string-reverse function and a test"
+```
+
+**Why Ollama instead of a cloud AI tool (Copilot, ChatGPT, Cursor)?**
+
+- 🔒 **Private** — your code never leaves your machine; no vendor sees it. Ideal for proprietary or regulated codebases where you can't paste code into a cloud tool.
+- 💸 **Free, no limits** — no API key, no per-token bill, no rate limits, no subscription.
+- 📴 **Offline** — works on a plane, in an air-gapped network, anywhere.
+- 🔓 **No lock-in** — swap models freely (`llama3.1`, `qwen2.5-coder`, `deepseek-coder`).
+- ⚖️ **Honest trade-off:** local models are smaller/slower than frontier Claude/GPT — excellent for everyday review/refactor/explain, but reach for a cloud model on the hardest reasoning. pi lets you switch with one flag, so you get both.
+
+### Run the web app locally
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py    # opens http://localhost:8501
+```
+
+Run locally and the web app can also reach **Ollama** (the hosted demo can't —
+it has no localhost Ollama). Everything else (Groq/OpenRouter/OpenAI/Anthropic)
+works in both.
 
 > **Keys never touch the repo.** pi reads them from the environment only — they
 > are never stored or logged, `.env` is gitignored, and `.env.example` holds
@@ -133,7 +180,8 @@ the same conversation move between Claude and GPT.
 - **No raw shell** — `run_bash` is disabled. The agent gets `run_command`
   instead: a read-only allowlist (`ls/cat/grep/find/…`), no shell features, no
   network, absolute/parent paths blocked — so visitors can't run commands on the host.
-- **Sandboxed** — file tools are confined to a fresh temp directory per session.
+- **Sandboxed** — file tools (and ZIP uploads, zip-slip-guarded) are confined to a fresh temp directory per session.
+- **Upload a file or project `.zip`** — then ask it to *review* a file or *explain this project*; the agent can `delegate` exploration to a sub-agent.
 
 Run locally:
 
@@ -160,8 +208,9 @@ skills/<name>/SKILL.md   # frontmatter: name, description, trigger + the guidanc
 pi --skills-dir ./skills "review llm.py"   # CLI loads skills from a directory
 ```
 
-Bundled: `planning`, `write-tests`, `code-review`, `refactor`, `debug`,
-`explain-code`, `write-docs`. Add your own by dropping a new folder — no code changes.
+Bundled: `planning`, `orchestrate`, `write-tests`, `code-review`, `refactor`,
+`debug`, `explain-code`, `explain-project`, `architecture`, `write-docs`. Add your
+own by dropping a new folder — no code changes.
 
 ## Extending it (the whole point)
 

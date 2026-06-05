@@ -346,8 +346,9 @@ class ProviderSpec:
     default_model: str
     key_env: str          # environment variable holding the key
     key_url: str          # where a user gets a key
-    base_url: str | None = None   # OpenAI-compatible endpoint (Groq / OpenRouter)
+    base_url: str | None = None   # OpenAI-compatible endpoint (Groq / OpenRouter / Ollama)
     free: bool = False    # has a usable free tier (no credit card)
+    requires_key: bool = True     # Ollama (local) needs no key
 
 
 # Groq and OpenRouter are OpenAI-compatible, so they reuse OpenAIProvider with a
@@ -371,6 +372,13 @@ PROVIDERS: dict[str, ProviderSpec] = {
         "OPENROUTER_API_KEY", "https://openrouter.ai/keys",
         base_url="https://openrouter.ai/api/v1", free=True,
     ),
+    # Local + private + free: runs against an Ollama server on the same machine.
+    # No key needed; only reachable when pi runs locally (not on cloud hosting).
+    "ollama": ProviderSpec(
+        "ollama", "openai", "llama3.1",
+        "OLLAMA_API_KEY", "https://ollama.com/download",
+        base_url="http://localhost:11434/v1", free=True, requires_key=False,
+    ),
 }
 
 
@@ -393,6 +401,10 @@ def build_provider(
     spec = PROVIDERS.get(chosen)
     kind = spec.kind if spec else ("openai" if chosen == "openai" else "anthropic")
     base_url = spec.base_url if spec else None
+
+    # Keyless local providers (Ollama) still need a non-empty string for the SDK.
+    if spec is not None and not spec.requires_key and not api_key:
+        api_key = "ollama"
 
     if kind == "openai":
         return OpenAIProvider(model=model, api_key=api_key, base_url=base_url)

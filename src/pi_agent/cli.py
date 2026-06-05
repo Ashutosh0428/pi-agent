@@ -59,11 +59,11 @@ def main(argv: list[str] | None = None) -> int:
             config.system_prompt, load_skills(args.skills_dir)
         )
 
-    env_key = PROVIDER_ENV_KEY[config.provider]
-    if not os.environ.get(env_key):
+    spec = PROVIDERS[config.provider]
+    if spec.requires_key and not os.environ.get(spec.key_env):
         print(
-            f"Error: {env_key} is not set. Export it first:\n"
-            f"    export {env_key}=...",
+            f"Error: {spec.key_env} is not set. Export it first:\n"
+            f"    export {spec.key_env}=...",
             file=sys.stderr,
         )
         return 1
