@@ -131,7 +131,7 @@ Ollama on the cloud server).
 flowchart LR
     CLI["💻 CLI / REPL"] --> AG
     WEB["🌐 Streamlit<br/>(BYO key)"] --> AG
-    AG["🤖 Agent<br/>provider- &amp; UI-agnostic<br/>neutral transcript + retry"]
+    AG["🤖 Agent<br/>provider/UI-agnostic<br/>neutral transcript + retry"]
     AG --> P["🧠 Providers<br/>Claude · GPT · Groq<br/>OpenRouter · Gemini · Ollama"]
     AG --> T["🔧 Tools<br/>plan · fs · grep · delegate<br/>run_command · run_bash<br/>analyze_data · make_slides"]
     AG --> S["📜 Skills<br/>SKILL.md inlined"]
