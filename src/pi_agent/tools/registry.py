@@ -8,6 +8,7 @@ from pi_agent.sandbox import Sandbox
 from pi_agent.tools.base import Tool
 from pi_agent.tools.filesystem import filesystem_tools
 from pi_agent.tools.planning import planning_tools
+from pi_agent.tools.safe_exec import safe_command_tools
 from pi_agent.tools.search import search_tools
 from pi_agent.tools.shell import shell_tools
 
@@ -44,9 +45,18 @@ class ToolRegistry:
             return f"Error running {name}: {exc}"
 
 
-def build_default_tools(enable_shell: bool = True) -> ToolRegistry:
-    """Assemble the default tool set. Shell is optional for safe hosting."""
+def build_default_tools(
+    enable_shell: bool = True, enable_safe_command: bool = False
+) -> ToolRegistry:
+    """Assemble the default tool set.
+
+    ``enable_shell`` adds the full ``run_bash`` (local/trusted use only).
+    ``enable_safe_command`` adds the restricted, read-only ``run_command``
+    (safe for public/untrusted contexts). They are independent.
+    """
     tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
         tools += shell_tools()
+    if enable_safe_command:
+        tools += safe_command_tools()
     return ToolRegistry(tools)

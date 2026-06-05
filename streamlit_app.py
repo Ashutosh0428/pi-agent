@@ -139,7 +139,10 @@ def _get_agent() -> Agent:
             system_prompt = build_system_prompt(SYSTEM_PROMPT, load_skills(SKILLS_DIR))
         agent = Agent(
             provider=build_provider(model, provider, api_key=api_key),
-            registry=build_default_tools(enable_shell=False),  # no shell on a public app
+            registry=build_default_tools(
+                enable_shell=False,          # no raw shell on a public app
+                enable_safe_command=True,    # restricted, read-only run_command is safe
+            ),
             sandbox=Sandbox(_sandbox_dir()),
             config=AgentConfig(
                 model=model,

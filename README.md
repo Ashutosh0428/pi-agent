@@ -32,7 +32,8 @@ you ──prompt──► pi ──► LLM decides ──► calls tools (read/w
 - **Streaming** — text streams token-by-token in the REPL (Anthropic).
 - **Usage + cost** — per-turn token counts and an estimated session cost (`/cost`).
 - **Extended thinking** — opt-in (`--think` / `/think`) on Anthropic.
-- **Tools:** `update_plan`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`, `run_bash`.
+- **Tools:** `update_plan`, `read_file`, `write_file`, `edit_file`, `list_dir`, `grep`,
+  `run_command` (restricted, read-only — safe for the public web app), `run_bash` (full shell, local only).
 - **Skills** — drop a `SKILL.md` in `skills/<name>/` and its guidance is inlined
   into the system prompt (index + contents), AIOP-style. Ships with `planning`,
   `write-tests`, `code-review`, `refactor`, `debug`, `explain-code`, `write-docs`.
@@ -129,7 +130,9 @@ the same conversation move between Claude and GPT.
 
 - **Bring your own key** — the visitor pastes their Anthropic/OpenAI key; it is
   used only for that session and **never stored, logged, or committed**.
-- **No shell** — `run_bash` is disabled, so visitors can't run commands on the host.
+- **No raw shell** — `run_bash` is disabled. The agent gets `run_command`
+  instead: a read-only allowlist (`ls/cat/grep/find/…`), no shell features, no
+  network, absolute/parent paths blocked — so visitors can't run commands on the host.
 - **Sandboxed** — file tools are confined to a fresh temp directory per session.
 
 Run locally:

@@ -1,0 +1,106 @@
+"""Restricted command tool — safe to expose on a public app.
+
+Unlike ``run_bash`` (raw shell, local use only), ``run_command``:
+
+* runs with **no shell** (``shell=False``) — so pipes, redirects, ``&&``,
+  ``$(...)`` and other injection vectors are inert (passed as literal args);
+* allows only a small **allowlist** of read-only inspection commands;
+* **rejects absolute paths and parent-directory traversal**, so it can't reach
+  anything outside the per-session sandbox (no ``cat /etc/passwd``);
+* runs with a minimal env, a hard timeout, and capped output.
+
+It executes processes on the host, but confined to read-only inspection inside
+the sandbox directory — acceptable for an untrusted/public context where
+``run_bash`` would be a remote-code-execution hole.
+"""
+
+from __future__ import annotations
+
+import shlex
+import subprocess
+from typing import Any
+
+from pi_agent.sandbox import Sandbox
+from pi_agent.tools.base import Tool
+
+ALLOWED = {"ls", "cat", "head", "tail", "wc", "grep", "find"}
+_SAFE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8"}
+MAX_OUTPUT = 4000
+TIMEOUT_SECONDS = 10
+
+
+def _is_unsafe_path(token: str) -> bool:
+    """Block absolute paths, home expansion, and parent-directory traversal."""
+    if token.startswith(("/", "~")):
+        return True
+    return ".." in token.split("/")
+
+
+def _run_command(args: dict[str, Any], sb: Sandbox) -> str:
+    raw = (args.get("command") or "").strip()
+    if not raw:
+        return "Error: empty command."
+    try:
+        tokens = shlex.split(raw)
+    except ValueError as exc:
+        return f"Error: could not parse command: {exc}"
+    if not tokens:
+        return "Error: empty command."
+
+    cmd = tokens[0]
+    if cmd not in ALLOWED:
+        return f"Error: '{cmd}' is not allowed. Allowed: {', '.join(sorted(ALLOWED))}."
+
+    for tok in tokens[1:]:
+        if not tok.startswith("-") and _is_unsafe_path(tok):
+            return (
+                f"Error: '{tok}' points outside the sandbox "
+                "(absolute, home, and parent paths are blocked)."
+            )
+
+    try:
+        proc = subprocess.run(
+            tokens,
+            cwd=str(sb.root),
+            env=_SAFE_ENV,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return f"Error: command timed out after {TIMEOUT_SECONDS}s."
+    except (OSError, ValueError) as exc:
+        return f"Error running command: {exc}"
+
+    out = (proc.stdout or "") + (proc.stderr or "")
+    if len(out) > MAX_OUTPUT:
+        out = out[:MAX_OUTPUT] + "\n... [truncated]"
+    return f"$ {raw}\n(exit {proc.returncode})\n{out}".rstrip()
+
+
+def safe_command_tools() -> list[Tool]:
+    """The restricted, read-only command tool (for public/untrusted contexts)."""
+    return [
+        Tool(
+            name="run_command",
+            description=(
+                "Run ONE read-only inspection command in the workspace. "
+                f"Allowed programs: {', '.join(sorted(ALLOWED))}. No shell features "
+                "(no pipes, redirects, &&), no network; absolute and parent paths "
+                "are blocked. Examples: 'grep -rn TODO .', 'wc -l app.py', 'ls'."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "A single command, e.g. \"grep -rn def app.py\".",
+                    }
+                },
+                "required": ["command"],
+            },
+            handler=_run_command,
+            mutating=False,
+        )
+    ]
