@@ -170,6 +170,16 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Tell the model what's already in its workspace (uploaded files), so weaker
+    # tool-users don't have to discover files — they just read_file by name.
+    workspace = sorted(p.name for p in Path(_sandbox_dir()).glob("*") if p.is_file())
+    effective_prompt = prompt
+    if workspace:
+        effective_prompt = (
+            f"(Files in your working directory: {', '.join(workspace)}. "
+            "Use read_file to open one before reviewing or editing it.)\n\n" + prompt
+        )
+
     with st.chat_message("assistant"):
         plan_box = st.empty()
         status = st.status("pi is working…", expanded=True)
