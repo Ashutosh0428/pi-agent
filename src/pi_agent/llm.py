@@ -437,3 +437,17 @@ def build_provider(
         thinking_budget=thinking_budget,
         api_key=api_key,
     )
+
+
+def list_models(provider: str | None = None, *, api_key: str | None = None) -> list[str]:
+    """Return the model ids this key can actually use (the provider's own list).
+
+    The single source of truth — provider model ids drift, so ask the API rather
+    than trusting a hardcoded list. Raises if the key/provider is unreachable.
+    """
+    spec = PROVIDERS.get(provider or "")
+    seed = spec.default_model if spec else "x"
+    client = getattr(build_provider(seed, provider, api_key=api_key), "_client", None)
+    if client is None:
+        return []
+    return sorted({getattr(m, "id", str(m)) for m in client.models.list()})

@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from pi_agent.agent import Agent  # noqa: E402
 from pi_agent.config import SYSTEM_PROMPT, AgentConfig  # noqa: E402
-from pi_agent.llm import PROVIDERS, Usage, build_provider, estimate_cost  # noqa: E402
+from pi_agent.llm import PROVIDERS, Usage, build_provider, estimate_cost, list_models  # noqa: E402
 from pi_agent.sandbox import Sandbox  # noqa: E402
 from pi_agent.skills import build_system_prompt, load_skills  # noqa: E402
 from pi_agent.tools.registry import build_default_tools  # noqa: E402
@@ -96,6 +96,16 @@ with st.sidebar:
             "🖥️ Local & free — runs against Ollama at localhost:11434 "
             "(works when you run this app locally, not on the hosted demo)."
         )
+
+    if (api_key or not spec.requires_key) and st.button(
+        "🔎 List models my key supports", use_container_width=True
+    ):
+        try:
+            ids = list_models(provider, api_key=api_key or None)
+            st.caption(f"{len(ids)} models — paste one into ✏️ custom:")
+            st.code("\n".join(ids) or "(none returned)")
+        except Exception as exc:  # noqa: BLE001
+            st.warning(f"Couldn't list models: {type(exc).__name__}")
 
     use_skills = st.toggle("Use skills (plan, tests, review, debug, …)", value=True)
 
