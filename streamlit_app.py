@@ -38,12 +38,21 @@ STATUS_ICON = {"done": "✅", "in_progress": "⏳", "pending": "⬜"}
 UPLOAD_TYPES = ["zip", "csv", "tsv", "xlsx", "py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
 DATA_EXTS = {"csv", "tsv", "xlsx", "json"}
 
-st.set_page_config(page_title="pi-agent — try it", page_icon="🤖", layout="centered")
+st.set_page_config(
+    page_title="pi-agent — try it",
+    page_icon="🤖",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
 
 st.markdown(
     """
     <style>
-      #MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
+      #MainMenu, footer { visibility: hidden; }
+      /* never hide the sidebar open/close control */
+      [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
+      [data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"] {
+        visibility: visible !important; }
       .block-container { padding-top: 2.2rem; padding-bottom: 7rem; max-width: 840px; }
       /* gradient divider under the hero */
       .hero-rule { height: 3px; border: 0; border-radius: 3px; margin: .4rem 0 1.4rem;
