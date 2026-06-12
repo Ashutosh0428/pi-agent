@@ -55,14 +55,16 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 | 📦 **Project ZIP upload** | drop a zipped repo (zip-slip-safe) → *"explain this project"* (purpose, flow, components) |
 | 📊 **Data analysis** | `analyze_data` profiles a CSV/Excel like a data scientist (stats, missing %, correlations) |
 | 📑 **Slide generation** | `make_slides` builds a downloadable `.pptx` from an outline |
-| 🔁 **Resilient** | transient errors (429/5xx/timeout) auto-retry ≤5× w/ backoff; bad key/request fail fast |
-| 🌊 **Streaming + cost** | token-by-token streaming, per-turn token counts, estimated session cost (`/cost`) |
+| 🔁 **Resilient** | transient errors (429/5xx/timeout) auto-retry ≤5× w/ jittered backoff; bad key/request fail fast; long sessions trim history to fit the context window |
+| 🌊 **Streaming + cost** | token-by-token streaming on **every** provider (Anthropic + all OpenAI-compatible), per-turn token counts, estimated session cost (`/cost`) |
+| 🔧 **git + web** | read-only `git` inspection and an SSRF-guarded `web_fetch`, locally |
 | 📜 **Skills** | `SKILL.md` files inlined into the prompt — 12 bundled, add your own with zero code |
 | 🔒 **Sandboxed & safe** | paths confined to the workspace; public web demo runs no raw shell |
 
 **Tools:** `update_plan` · `delegate` · `read_file` · `write_file` · `edit_file` ·
-`list_dir` · `grep` · `run_command` (restricted, public-safe) · `run_bash` (full
-shell, local only) · `analyze_data` · `make_slides`.
+`list_dir` · `grep` · `git` (read-only, local) · `web_fetch` (SSRF-guarded, local) ·
+`run_command` (restricted, public-safe) · `run_bash` (full shell, local only) ·
+`analyze_data` · `make_slides`.
 
 ## 🚀 Run it locally
 
@@ -136,8 +138,8 @@ flowchart LR
     CLI["💻 CLI / REPL"] --> AG
     WEB["🌐 Streamlit<br/>(BYO key)"] --> AG
     AG["🤖 Agent<br/>provider/UI-agnostic<br/>neutral transcript + retry"]
-    AG --> P["🧠 Providers<br/>Claude · GPT · Groq<br/>OpenRouter · Gemini · Ollama"]
-    AG --> T["🔧 Tools<br/>plan · fs · grep · delegate<br/>run_command · run_bash<br/>analyze_data · make_slides"]
+    AG --> P["🧠 Providers<br/>Claude · GPT · Groq · OpenRouter<br/>Gemini · EURI · GLM · Ollama"]
+    AG --> T["🔧 Tools<br/>plan · fs · grep · delegate · git · web_fetch<br/>run_command · run_bash<br/>analyze_data · make_slides"]
     AG --> S["📜 Skills<br/>SKILL.md inlined"]
     T --> SB["🔒 Sandbox<br/>path-confined workspace"]
 ```
@@ -156,7 +158,9 @@ src/pi_agent/
     base.py registry.py        # Tool spec + dispatch
     planning.py                # update_plan (live todos)
     filesystem.py search.py    # read/write/edit/list + grep
+    _subprocess.py             # shared path-guard + confined runner
     shell.py safe_exec.py      # run_bash (local) + run_command (public-safe)
+    vcs.py web.py              # git (read-only) + web_fetch (SSRF-guarded)
     subagent.py                # delegate
     datasci.py                 # analyze_data + make_slides
 streamlit_app.py   # public web demo (BYO key, no shell, temp sandbox)
@@ -202,18 +206,23 @@ transcript, call the API, return an `AssistantResponse`). The agent loop is unch
 ## ✅ Testing
 
 ```bash
-pytest          # 69 tests — scripted fake provider, no API key, no network
+pytest          # 100 tests — scripted fake provider, no API key, no network
 ```
 
-Covers the sandbox boundary, every tool, the agent loop (tool execution,
-max-iteration guard, confirmation, events, usage, retry, delegation), the
-provider translators, and zip-slip safety.
+Covers the sandbox boundary, every tool (including the `run_command` RCE guard,
+the read-only `git` tool, and the `web_fetch` SSRF guard), the agent loop (tool
+execution, max-iteration guard, confirmation, events, usage, retry, history
+trimming, delegation), the provider translators, streaming chunk-assembly, and
+zip-slip safety.
 
 ## 🗺️ Roadmap
 
-- More tools (git, web fetch, apply-patch)
-- OpenAI/Groq streaming (Anthropic streams today)
+- ~~Read-only `git` tool~~ · ~~`web_fetch`~~ · ~~streaming on every provider~~ — done in 0.3
+- `apply_patch` (multi-file edits in one tool call)
+- Token-aware (not count-based) history trimming
 - Charts in `analyze_data`; skill auto-selection by relevance
+
+See [CHANGELOG.md](CHANGELOG.md) for the full 0.3 release.
 
 ---
 
