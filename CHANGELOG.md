@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 semantic versioning.
 
+## [0.5.0] — 2026-06-12
+
+### Added
+- **Persistent project memory.** New `remember` tool appends durable facts
+  to `.pi/memory.md` (plain markdown, user-editable); the CLI auto-recalls
+  the trailing 4 KB into the system prompt next session. CLI/local only.
+- **Reflection pass (`--reflect`).** After a successful answer, one bounded
+  self-review turn (≤5 tool iterations, never recursive) re-checks the work,
+  fixes real problems with tools, and restates the final answer.
+- **Skill auto-routing.** Skills are scored against the prompt and only the
+  top-k (default 3) are inlined in full; the one-line index of all skills
+  stays visible. One-shot CLI flag `--skills-top-k`; the web demo routes
+  per message. `0` restores inline-everything.
+- **`apply_patch` tool** — several exact-string edits across files in one
+  atomic call: all hunks validated first, any failure leaves every file
+  untouched.
+- **Web: workspace file browser** — view any uploaded or agent-created file
+  with syntax highlighting and download it, mid-conversation; auto-expands
+  when a deck/report artifact appears (replaces the Downloads strip).
+- **Web: session cost meter** (sidebar, accumulates across turns) and
+  **chat transcript download** (.md).
+- **Six new skills** (18 bundled): security-review, performance-review,
+  write-readme, commit-message, api-design, fix-ci.
+- **docs/USAGE.md** — complete post-install guide (keys for all 8 providers,
+  every flag, troubleshooting, FAQ) and **ROADMAP.md** (MCP, knowledge base,
+  browser automation, parallel agents, benchmark — phased).
+
+### Fixed
+- Web demo: skills toggle now also benefits from routing instead of
+  inlining all skill bodies into every request.
+
 ## [0.4.0] — 2026-06-12
 
 ### Added
