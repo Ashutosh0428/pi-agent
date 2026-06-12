@@ -36,6 +36,11 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return list(self._tools)
 
+    def extend(self, tools: list[Tool]) -> None:
+        """Register additional tools after construction (e.g. discovered MCP tools)."""
+        for tool in tools:
+            self._tools[tool.name] = tool
+
     def without(self, name: str) -> "ToolRegistry":
         """Return a copy of this registry with ``name`` removed.
 
