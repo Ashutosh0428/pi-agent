@@ -9,6 +9,7 @@ from pi_agent.tools.base import Tool
 from pi_agent.tools.datasci import data_tools
 from pi_agent.tools.filesystem import filesystem_tools
 from pi_agent.tools.memory import memory_tools
+from pi_agent.tools.patch import patch_tools
 from pi_agent.tools.planning import planning_tools
 from pi_agent.tools.safe_exec import safe_command_tools
 from pi_agent.tools.search import search_tools
@@ -81,7 +82,7 @@ def build_default_tools(
     ``enable_web`` adds the SSRF-guarded ``web_fetch`` tool (local/trusted only).
     All are independent.
     """
-    tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
+    tools = [*planning_tools(), *filesystem_tools(), *patch_tools(), *search_tools()]
     if enable_shell:
         tools += shell_tools()
     if enable_safe_command:
