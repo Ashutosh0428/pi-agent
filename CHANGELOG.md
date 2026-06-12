@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 semantic versioning.
 
+## [0.6.0] — 2026-06-12
+
+### Added
+- **MCP (Model Context Protocol) support.** A pure-stdlib stdio client
+  (`mcp_client.py`) connects to MCP servers declared in the standard
+  `mcpServers` JSON (paste your Claude Desktop / Cursor config unchanged):
+  `initialize` handshake, paginated `tools/list`, id-matched `tools/call`.
+  Each server tool becomes a pi tool `mcp__<server>__<tool>`, confirmation-
+  gated. A server that fails to start is skipped with a warning. `--mcp-config`
+  flag; `/mcp` REPL command; auto-discovers `.pi/mcp.json` then `~/.pi/mcp.json`.
+  CLI/local only — the web demo never spawns subprocesses. **No new
+  dependency** — the wire protocol is implemented directly.
+- **Local knowledge base.** `pi ingest <dir>` chunks `.md/.txt/.rst` files and
+  builds a **pure-python BM25** index in a stdlib **sqlite** database
+  (`.pi/kb.sqlite3`). `pi ask "<question>"` answers grounded in those docs with
+  `[source]` citations; a `search_knowledge` tool auto-registers in chat when a
+  KB exists. Fully offline (pairs with local Ollama). No embeddings, no API
+  calls, no new dependency.
+- **Safety guardrails (on by default).** Deterministic checks at the single
+  tool-dispatch choke-point, so the CLI and web app are protected identically:
+  - *Secret-exfiltration block* — an external tool (`web_fetch`/`run_bash`/MCP)
+    whose arguments contain a live secret-env value is refused.
+  - *Destructive-command confirmation* — `rm -rf /`, `curl|sh`, `sudo`, fork
+    bombs, force pushes require confirmation even under `--yes`.
+  - *Untrusted-content spotlighting* — `web_fetch`/MCP output is wrapped so the
+    model treats it as data, blunting prompt injection.
+  - *Output secret redaction* — key-shaped substrings are masked in every tool
+    result. `--no-guardrails` opts out.
+- **Three new skills** (21 total): `use-mcp`, `knowledge-base`, `secure-tools`.
+
 ## [0.5.0] — 2026-06-12
 
 ### Added

@@ -59,6 +59,9 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 | | |
 |---|---|
 | 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** · **EURI** · **GLM** (free) · **Ollama** (local, no key) — switch mid-chat with `/model`; bare `pi` auto-detects from your env keys |
+| 🔌 **MCP support** | connect any [MCP](https://modelcontextprotocol.io) server (GitHub, Postgres, Slack, …) via the standard `mcpServers` config — its tools appear as `mcp__server__tool`. Zero new dependencies |
+| 📚 **Local knowledge base** | `pi ingest docs/` → BM25 over sqlite → `pi ask "how does auth work?"` with citations. Fully offline |
+| 🛡️ **Guardrails (on by default)** | blocks secret exfiltration, confirms destructive shell commands even under `--yes`, redacts secrets, and spotlights untrusted tool output against prompt injection |
 | 🧬 **Persistent memory** | the agent saves project facts to `.pi/memory.md` (`remember` tool) and recalls them next session — day 5 continues day 1 |
 | 🔍 **Self-review** | `--reflect`: after answering, one bounded pass that re-checks the work and fixes real problems |
 | 🎯 **Skill routing** | only the most relevant skills are inlined per prompt — leaner prompts, better adherence, cheaper free tiers |
@@ -124,7 +127,23 @@ pi "remember that this repo uses pytest fixtures, never mocks"  # persists to .p
 pi --no-shell                                               # safe mode (disable run_bash)
 ```
 
-REPL commands: `/help` · `/tools` · `/model <id>` · `/think` · `/cost` · `/reset` · `/exit`.
+REPL commands: `/help` · `/tools` · `/mcp` · `/model <id>` · `/think` · `/cost` · `/reset` · `/exit`.
+
+### 🔌 Connect MCP servers + your own docs
+
+```bash
+# Knowledge base — ingest your docs, then ask grounded questions (offline)
+pi ingest ./docs
+pi ask "how does authentication work?"        # answers with [source] citations
+
+# MCP — drop a standard mcpServers config at .pi/mcp.json, then any server's
+# tools (GitHub, Postgres, Slack, filesystem…) appear as mcp__server__tool
+cat .pi/mcp.json
+# {"mcpServers": {"github": {"command": "npx",
+#   "args": ["-y", "@modelcontextprotocol/server-github"],
+#   "env": {"GITHUB_TOKEN": "ghp_…"}}}}
+pi   # /mcp lists the connected tools
+```
 Flags: `--provider` · `--model` · `--dir` · `--yes` · `--no-shell` · `--no-stream` · `--think` · `--skills-dir` · `--version`.
 
 ### 🐳 Docker
@@ -243,7 +262,7 @@ transcript, call the API, return an `AssistantResponse`). The agent loop is unch
 ## ✅ Testing
 
 ```bash
-pytest          # 136 tests — scripted fake provider, no API key, no network
+pytest          # 174 tests — scripted fake provider/MCP server, no API key, no network
 ```
 
 Covers the sandbox boundary, every tool (including the `run_command` RCE guard,
@@ -254,8 +273,8 @@ zip-slip safety.
 
 ## 🗺️ Roadmap
 
-Next up: **MCP server support**, a local **knowledge base** (`pi ingest docs/`
-→ `pi ask`), **browser automation**, deep-research mode, parallel sub-agents,
+Shipped in 0.6: ~~MCP server support~~ · ~~local knowledge base~~ · ~~guardrails~~.
+Next up: **browser automation**, **deep-research mode**, **parallel sub-agents**,
 and `pi benchmark` — the full plan with phases lives in
 [ROADMAP.md](ROADMAP.md). Release history: [CHANGELOG.md](CHANGELOG.md).
 

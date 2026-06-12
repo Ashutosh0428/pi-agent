@@ -19,6 +19,7 @@ HELP = """\
 Commands:
   /help            show this help
   /tools           list available tools
+  /mcp             list connected MCP servers' tools
   /model <id>      switch model (keeps the conversation; can cross providers)
   /think           toggle Anthropic extended thinking (uses extra billed tokens)
   /cost            show token usage and estimated cost this session
@@ -165,6 +166,16 @@ def run_repl(agent: Agent) -> None:
             continue
         if user_input == "/tools":
             console.print(", ".join(agent.registry.names()))
+            continue
+        if user_input == "/mcp":
+            mcp = sorted(n for n in agent.registry.names() if n.startswith("mcp__"))
+            if mcp:
+                console.print("[bold]MCP tools:[/bold] " + ", ".join(mcp))
+            else:
+                console.print(
+                    "[dim]No MCP servers connected. Add a .pi/mcp.json (mcpServers config) "
+                    "or pass --mcp-config.[/dim]"
+                )
             continue
         if user_input.startswith("/model"):
             _switch_model(agent, user_input[len("/model") :])

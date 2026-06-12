@@ -133,7 +133,65 @@ requirements, fixes real problems with tools, then restates the final answer.
 One bounded pass (≤5 tool iterations). Costs extra tokens — that's why it's
 opt-in.
 
-## 9 · The web app locally
+## 9 · MCP servers (connect external tools)
+
+pi speaks the Model Context Protocol over stdio, so any MCP server becomes a
+set of pi tools. Drop a standard `mcpServers` config (same shape as Claude
+Desktop / Cursor) at `.pi/mcp.json` in your project, or `~/.pi/mcp.json`
+globally, or pass `--mcp-config <path>`:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_…" }
+    },
+    "postgres": {
+      "command": "uvx",
+      "args": ["mcp-server-postgres", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+Run `pi`, then `/mcp` to see connected tools — they're named
+`mcp__github__create_issue`, etc. MCP tools are confirmation-gated (they may
+change external state). A server that fails to start is skipped with a warning,
+not a crash. MCP runs in the local CLI only — the hosted web demo never spawns
+subprocesses.
+
+## 10 · Knowledge base (`pi ingest` / `pi ask`)
+
+Turn a folder of docs into a searchable, citable knowledge base — fully offline
+(no embeddings, no API calls for retrieval):
+
+```bash
+pi ingest ./docs                       # indexes .md/.txt/.rst → .pi/kb.sqlite3
+pi ask "how does authentication work?" # grounded answer with [source] citations
+```
+
+In a normal `pi` chat, once a KB exists the agent gets a `search_knowledge`
+tool and pulls from your docs automatically. Re-run `pi ingest` to rebuild
+after the docs change. `pi ask` needs a model (for the answer); ingest and
+search need no key at all.
+
+## 11 · Guardrails (safe by default)
+
+Deterministic safety checks run on every tool call (no LLM judge):
+
+- **Secret exfiltration blocked** — a `web_fetch`/`run_bash`/MCP call whose
+  arguments contain one of your secret-env values is refused.
+- **Destructive commands confirmed** — `rm -rf /`, `curl|sh`, `sudo`, fork
+  bombs, `git push --force` require confirmation *even under `--yes`*.
+- **Untrusted content spotlighted** — text from `web_fetch`/MCP is wrapped so
+  the model treats it as data, not instructions (prompt-injection defense).
+- **Secrets redacted** — key-shaped strings are masked in tool output.
+
+All on by default. `--no-guardrails` disables them (not recommended).
+
+## 12 · The web app locally
 
 ```bash
 git clone https://github.com/Ashutosh0428/pi-agent && cd pi-agent

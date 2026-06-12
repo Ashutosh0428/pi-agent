@@ -16,17 +16,19 @@ release. Issues and PRs against any item are welcome.
   **reflection pass** (`--reflect` self-review) · **skill auto-routing**
   (top-k per prompt) · atomic `apply_patch` · workspace file browser in the
   web app · session cost meter · 18 bundled skills · full usage guide
+- **0.6** — **MCP client** (stdio, standard `mcpServers` config, zero deps) ·
+  **local knowledge base** (`pi ingest`/`pi ask`, BM25 over sqlite, offline) ·
+  **guardrails** (secret-exfiltration block, destructive-command confirmation,
+  untrusted-content spotlighting, output redaction) · 21 bundled skills
 
-## Phase 1 — connect (next)
+## Phase 1 — connect ✅ shipped in 0.6
 
-- **MCP support** — consume Model Context Protocol servers as tools: point
-  pi at a GitHub/Postgres/Slack/Notion MCP server and its tools appear in
-  the registry next to the built-ins. The `ToolRegistry` seam was built for
-  exactly this.
-- **Local knowledge base** — `pi ingest docs/` → embed into a local store →
-  `pi ask "how does auth work?"` answers with citations from *your* docs.
+- ~~**MCP support**~~ — done: stdio client, `mcp__server__tool`, `/mcp`.
+- ~~**Local knowledge base**~~ — done: `pi ingest`/`pi ask` (BM25/sqlite).
 - **Richer memory** — structured preferences (always/never rules) on top of
-  the fact log.
+  the fact log *(still open)*.
+- **Semantic KB** — optional embedding/hybrid retrieval over the BM25 baseline
+  *(still open)*.
 
 ## Phase 2 — reach
 
