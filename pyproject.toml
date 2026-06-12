@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pi-agent"
-version = "0.1.0"
+version = "0.3.0"
 description = "A minimal terminal AI coding agent (LLM tool-use loop)."
 requires-python = ">=3.10"
 dependencies = [
@@ -15,7 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.30"]
 data = ["pandas>=2.0", "python-pptx>=0.6.21", "openpyxl>=3.1"]
-dev = ["pytest>=7.4", "ruff>=0.1"]
+dev = ["pytest>=7.4", "ruff>=0.1", "mypy>=1.8"]
 
 [project.scripts]
 pi = "pi_agent.cli:main"
@@ -26,6 +26,12 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+# The vendor SDKs (anthropic, openai, pandas, pptx) ship partial or no stubs;
+# the agent core is fully typed regardless.
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
