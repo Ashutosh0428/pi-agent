@@ -30,16 +30,20 @@ class AgentConfig:
     """Runtime configuration for an agent session."""
 
     model: str = DEFAULT_MODEL
-    provider: str | None = None       # None -> inferred from the model id
+    provider: str | None = None  # None -> inferred from the model id
     max_tokens: int = 4096
-    max_iterations: int = 25          # tool-use loop safety cap
+    max_iterations: int = 25  # tool-use loop safety cap
     system_prompt: str = SYSTEM_PROMPT
-    enable_shell: bool = True         # expose the run_bash tool
-    auto_approve: bool = False        # skip confirmation for write/edit/bash
-    stream: bool = True               # stream text deltas when the provider can
-    thinking: bool = False            # Anthropic extended thinking (opt-in, billed)
-    thinking_budget: int = 2048       # thinking tokens when enabled
-    max_retries: int = 5              # retry transient model errors (rate limit, 5xx, timeout)
+    enable_shell: bool = True  # expose the run_bash tool
+    auto_approve: bool = False  # skip confirmation for write/edit/bash
+    stream: bool = True  # stream text deltas when the provider can
+    thinking: bool = False  # Anthropic extended thinking (opt-in, billed)
+    thinking_budget: int = 2048  # thinking tokens when enabled
+    max_retries: int = 5  # retry transient model errors (rate limit, 5xx, timeout)
+    # Cap how many recent transcript messages are sent to the model, so long
+    # sessions don't grow past the context window. 0 disables trimming. The full
+    # transcript is still kept locally (for /cost); only the request is trimmed.
+    max_history_messages: int = 80
 
     @classmethod
     def from_env(cls) -> "AgentConfig":

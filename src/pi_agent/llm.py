@@ -76,15 +76,23 @@ class AssistantResponse:
 # Approximate USD per 1M tokens (input, output). Matched by substring on the
 # model id. These are estimates for display only — update as prices change.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
+    # Anthropic. Order matters: more specific keys must precede shorter ones that
+    # would also substring-match (e.g. "gemini-3.1-pro" before "gemini").
+    "claude-fable-5": (15.0, 75.0),
     "claude-opus": (15.0, 75.0),
     "claude-sonnet": (3.0, 15.0),
     "claude-haiku": (0.80, 4.0),
+    # OpenAI.
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.0),
     "gpt-4.1-mini": (0.40, 1.60),
     "gpt-4.1": (2.0, 8.0),
     "o4-mini": (1.10, 4.40),
     "o3": (2.0, 8.0),
+    # Gemini (paid-tier estimate; the flash models also have a free tier).
+    "gemini-3.1-pro": (1.25, 5.0),
+    "gemini-3.5-flash": (0.075, 0.30),
+    "gemini-2.5-flash": (0.075, 0.30),
 }
 
 
@@ -460,7 +468,12 @@ PROVIDERS: dict[str, ProviderSpec] = {
         "claude-sonnet-4-6",
         "ANTHROPIC_API_KEY",
         "https://console.anthropic.com/settings/keys",
-        models=("claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"),
+        models=(
+            "claude-fable-5",
+            "claude-sonnet-4-6",
+            "claude-opus-4-8",
+            "claude-haiku-4-5-20251001",
+        ),
     ),
     "openai": ProviderSpec(
         "openai",

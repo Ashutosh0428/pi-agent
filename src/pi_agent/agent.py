@@ -21,6 +21,7 @@ retried with backoff; the model may also ``delegate`` a subtask to a sub-agent.
 
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
@@ -44,8 +45,13 @@ ConfirmCallback = Callable[[ToolCall], bool]
 # else (429, 5xx, timeouts, dropped connections) is worth retrying.
 _PERMANENT_CODES = {400, 401, 403, 404, 422}
 _TRANSIENT_NAME_HINTS = (
-    "ratelimit", "timeout", "connection", "overloaded",
-    "serviceunavailable", "internalserver", "apistatus",
+    "ratelimit",
+    "timeout",
+    "connection",
+    "overloaded",
+    "serviceunavailable",
+    "internalserver",
+    "apistatus",
 )
 
 
@@ -101,10 +107,34 @@ class Agent:
                     f"Transient error ({type(exc).__name__}); "
                     f"retrying {attempt}/{self.config.max_retries}…",
                 )
-                time.sleep(min(2 ** (attempt - 1), 16))
+                # Exponential backoff with full jitter: spread concurrent retries
+                # instead of having them all wake at the same 1s/2s/4s marks.
+                time.sleep(random.uniform(0, min(2 ** (attempt - 1), 16)))
+
+    def _history_for_request(self) -> list[NeutralMessage]:
+        """The transcript slice to send, trimmed to ``max_history_messages``.
+
+        Long sessions would otherwise grow past the model's context window. We
+        keep the most recent messages but snap the start to a ``user`` boundary,
+        so an ``assistant`` tool call is never sent without its ``tool`` result
+        (which providers reject). The full transcript stays in ``self.messages``.
+        """
+        cap = self.config.max_history_messages
+        if cap <= 0 or len(self.messages) <= cap:
+            return self.messages
+        start = len(self.messages) - cap
+        while start < len(self.messages) and self.messages[start]["role"] != "user":
+            start += 1
+        if start >= len(self.messages):  # no boundary in window -> last user turn
+            start = max(
+                (i for i, m in enumerate(self.messages) if m["role"] == "user"),
+                default=0,
+            )
+        return self.messages[start:]
 
     def _ask(self, tools: list[dict[str, Any]]) -> tuple[AssistantResponse, bool]:
         """One model turn (with retry). Returns (response, streamed?)."""
+        messages = self._history_for_request()
         can_stream = (
             self.config.stream
             and getattr(self.provider, "supports_streaming", False)
@@ -116,13 +146,13 @@ class Agent:
             # already-shown deltas (duplicated text). Streaming is best-effort.
             response = self.provider.stream(  # type: ignore[attr-defined]
                 self.config.system_prompt,
-                self.messages,
+                messages,
                 tools,
                 lambda delta: self._emit("assistant_delta", delta),
             )
             return response, True
         response = self._with_retry(
-            lambda: self.provider.complete(self.config.system_prompt, self.messages, tools)
+            lambda: self.provider.complete(self.config.system_prompt, messages, tools)
         )
         return response, False
 

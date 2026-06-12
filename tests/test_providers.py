@@ -191,6 +191,13 @@ class TestCost:
     def test_unknown_model_returns_none(self):
         assert estimate_cost("some-local-model", Usage(100, 100)) is None
 
+    def test_fable_5_priced(self):
+        assert estimate_cost("claude-fable-5", Usage(1_000_000, 0)) == 15.0
+
+    def test_gemini_flash_priced_not_confused_with_pro(self):
+        # The flash key must match flash, not the pro entry listed before it.
+        assert estimate_cost("gemini-3.5-flash", Usage(1_000_000, 0)) == 0.075
+
     def test_free_model_is_zero(self):
         assert estimate_cost("meta-llama/llama-3.3-70b-instruct:free", Usage(100, 100)) == 0.0
 

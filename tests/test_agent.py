@@ -46,13 +46,15 @@ def _make_agent(provider, tmp_path, **cfg):
 
 class TestAgentLoop:
     def test_runs_tool_then_returns_final_text(self, tmp_path):
-        provider = FakeProvider([
-            _tool_step(
-                "creating file",
-                ToolCall("t1", "write_file", {"path": "hi.py", "content": "print(1)"}),
-            ),
-            _final_step("Done."),
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step(
+                    "creating file",
+                    ToolCall("t1", "write_file", {"path": "hi.py", "content": "print(1)"}),
+                ),
+                _final_step("Done."),
+            ]
+        )
         agent = _make_agent(provider, tmp_path)
         result = agent.run("create hi.py")
         assert result == "Done."
@@ -74,13 +76,15 @@ class TestAgentLoop:
         assert provider.calls == 3
 
     def test_confirm_false_skips_mutation(self, tmp_path):
-        provider = FakeProvider([
-            _tool_step(
-                "writing",
-                ToolCall("t1", "write_file", {"path": "x.txt", "content": "data"}),
-            ),
-            _final_step("ok"),
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step(
+                    "writing",
+                    ToolCall("t1", "write_file", {"path": "x.txt", "content": "data"}),
+                ),
+                _final_step("ok"),
+            ]
+        )
         agent = Agent(
             provider=provider,
             registry=build_default_tools(enable_shell=True),
@@ -93,10 +97,12 @@ class TestAgentLoop:
 
     def test_events_are_emitted(self, tmp_path):
         events = []
-        provider = FakeProvider([
-            _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),
-            _final_step("done"),
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),
+                _final_step("done"),
+            ]
+        )
         agent = _make_agent(provider, tmp_path)
         agent.on_event = lambda kind, payload: events.append(kind)
         agent.run("list")
@@ -106,10 +112,12 @@ class TestAgentLoop:
         assert "usage" in events
 
     def test_usage_accumulates_across_turns(self, tmp_path):
-        provider = FakeProvider([
-            _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),  # 10 + 5
-            _final_step("done"),  # 8 + 3
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),  # 10 + 5
+                _final_step("done"),  # 8 + 3
+            ]
+        )
         agent = _make_agent(provider, tmp_path)
         agent.run("list")
         assert agent.total_usage.input_tokens == 18
@@ -117,13 +125,17 @@ class TestAgentLoop:
         assert agent.total_usage.total_tokens == 26
 
     def test_plan_event_emitted_for_update_plan(self, tmp_path):
-        provider = FakeProvider([
-            _tool_step(
-                "planning",
-                ToolCall("p1", "update_plan", {"steps": [{"step": "do it", "status": "in_progress"}]}),
-            ),
-            _final_step("done"),
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step(
+                    "planning",
+                    ToolCall(
+                        "p1", "update_plan", {"steps": [{"step": "do it", "status": "in_progress"}]}
+                    ),
+                ),
+                _final_step("done"),
+            ]
+        )
         agent = _make_agent(provider, tmp_path)
         events = []
         agent.on_event = lambda kind, payload: events.append((kind, payload))
@@ -132,11 +144,45 @@ class TestAgentLoop:
         assert plans and plans[0][0]["step"] == "do it"
 
     def test_neutral_transcript_shape(self, tmp_path):
-        provider = FakeProvider([
-            _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),
-            _final_step("done"),
-        ])
+        provider = FakeProvider(
+            [
+                _tool_step("t", ToolCall("t1", "list_dir", {"path": "."})),
+                _final_step("done"),
+            ]
+        )
         agent = _make_agent(provider, tmp_path)
         agent.run("list")
         roles = [m["role"] for m in agent.messages]
         assert roles == ["user", "assistant", "tool", "assistant"]
+
+
+class TestHistoryTrimming:
+    def _agent(self, tmp_path, cap):
+        return _make_agent(FakeProvider([_final_step("x")]), tmp_path, max_history_messages=cap)
+
+    def test_no_trim_under_cap(self, tmp_path):
+        agent = self._agent(tmp_path, cap=80)
+        agent.messages = [{"role": "user", "content": "hi"}]
+        assert agent._history_for_request() is agent.messages
+
+    def test_disabled_when_cap_zero(self, tmp_path):
+        agent = self._agent(tmp_path, cap=0)
+        agent.messages = [{"role": "user", "content": str(i)} for i in range(200)]
+        assert len(agent._history_for_request()) == 200
+
+    def test_trims_and_snaps_to_user_boundary(self, tmp_path):
+        # A long transcript of repeated user/assistant/tool triples. Trimming to
+        # a small cap must never start on an assistant or tool message, or the
+        # provider would receive a tool_use without its result.
+        agent = self._agent(tmp_path, cap=4)
+        msgs: list = []
+        for i in range(10):
+            msgs.append({"role": "user", "content": f"u{i}"})
+            msgs.append(
+                {"role": "assistant", "content": "", "tool_calls": [ToolCall("c", "list_dir", {})]}
+            )
+            msgs.append({"role": "tool", "results": []})
+        agent.messages = msgs
+        sent = agent._history_for_request()
+        assert sent[0]["role"] == "user"  # snapped to a user boundary
+        assert len(sent) <= 4
