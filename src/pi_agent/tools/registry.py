@@ -13,6 +13,7 @@ from pi_agent.tools.safe_exec import safe_command_tools
 from pi_agent.tools.search import search_tools
 from pi_agent.tools.shell import shell_tools
 from pi_agent.tools.subagent import subagent_tools
+from pi_agent.tools.vcs import git_tools
 
 
 class ToolRegistry:
@@ -60,6 +61,7 @@ def build_default_tools(
     enable_safe_command: bool = False,
     enable_subagents: bool = False,
     enable_data: bool = False,
+    enable_vcs: bool = False,
 ) -> ToolRegistry:
     """Assemble the default tool set.
 
@@ -69,7 +71,9 @@ def build_default_tools(
     ``enable_subagents`` adds ``delegate`` (the Agent runs a focused sub-agent
     sequentially).
     ``enable_data`` adds ``analyze_data`` + ``make_slides`` (need the [data]
-    extra). All are independent.
+    extra).
+    ``enable_vcs`` adds the read-only ``git`` tool (local/trusted; inherits the
+    real environment to find git). All are independent.
     """
     tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
@@ -80,4 +84,6 @@ def build_default_tools(
         tools += subagent_tools()
     if enable_data:
         tools += data_tools()
+    if enable_vcs:
+        tools += git_tools()
     return ToolRegistry(tools)

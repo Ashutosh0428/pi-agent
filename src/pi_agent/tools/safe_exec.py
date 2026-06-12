@@ -24,10 +24,10 @@ cannot silently reopen the hole.
 from __future__ import annotations
 
 import shlex
-import subprocess
 from typing import Any
 
 from pi_agent.sandbox import Sandbox
+from pi_agent.tools._subprocess import SAFE_ENV, is_unsafe_path, run_confined
 from pi_agent.tools.base import Tool
 
 ALLOWED = {"ls", "cat", "head", "tail", "wc", "grep"}
@@ -43,16 +43,8 @@ _DANGEROUS_FLAGS = {
     "-fprintf",
     "-fls",  # find: write to arbitrary files
 }
-_SAFE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8"}
 MAX_OUTPUT = 4000
 TIMEOUT_SECONDS = 10
-
-
-def _is_unsafe_path(token: str) -> bool:
-    """Block absolute paths, home expansion, and parent-directory traversal."""
-    if token.startswith(("/", "~")):
-        return True
-    return ".." in token.split("/")
 
 
 def _run_command(args: dict[str, Any], sb: Sandbox) -> str:
@@ -73,31 +65,14 @@ def _run_command(args: dict[str, Any], sb: Sandbox) -> str:
     for tok in tokens[1:]:
         if tok in _DANGEROUS_FLAGS:
             return f"Error: '{tok}' is blocked (it can execute, write, or delete)."
-        if not tok.startswith("-") and _is_unsafe_path(tok):
+        if not tok.startswith("-") and is_unsafe_path(tok):
             return (
                 f"Error: '{tok}' points outside the sandbox "
                 "(absolute, home, and parent paths are blocked)."
             )
 
-    try:
-        proc = subprocess.run(
-            tokens,
-            cwd=str(sb.root),
-            env=_SAFE_ENV,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        return f"Error: command timed out after {TIMEOUT_SECONDS}s."
-    except (OSError, ValueError) as exc:
-        return f"Error running command: {exc}"
-
-    out = (proc.stdout or "") + (proc.stderr or "")
-    if len(out) > MAX_OUTPUT:
-        out = out[:MAX_OUTPUT] + "\n... [truncated]"
-    return f"$ {raw}\n(exit {proc.returncode})\n{out}".rstrip()
+    result = run_confined(tokens, sb, timeout=TIMEOUT_SECONDS, max_output=MAX_OUTPUT, env=SAFE_ENV)
+    return f"$ {raw}\n{result}"
 
 
 def safe_command_tools() -> list[Tool]:

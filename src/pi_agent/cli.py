@@ -18,9 +18,7 @@ PROVIDER_ENV_KEY = {name: spec.key_env for name, spec in PROVIDERS.items()}
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="pi", description="A minimal terminal AI coding agent."
-    )
+    parser = argparse.ArgumentParser(prog="pi", description="A minimal terminal AI coding agent.")
     parser.add_argument("prompt", nargs="*", help="One-shot prompt (omit for REPL).")
     parser.add_argument("--model", help="Model id (overrides PI_AGENT_MODEL).")
     parser.add_argument(
@@ -62,8 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     spec = PROVIDERS[config.provider]
     if spec.requires_key and not os.environ.get(spec.key_env):
         print(
-            f"Error: {spec.key_env} is not set. Export it first:\n"
-            f"    export {spec.key_env}=...",
+            f"Error: {spec.key_env} is not set. Export it first:\n    export {spec.key_env}=...",
             file=sys.stderr,
         )
         return 1
@@ -75,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
         thinking=config.thinking,
         thinking_budget=config.thinking_budget,
     )
-    registry = build_default_tools(enable_shell=config.enable_shell)
+    # The CLI is always local/trusted, so the read-only git tool is safe here
+    # (it is left off the public web demo).
+    registry = build_default_tools(enable_shell=config.enable_shell, enable_vcs=True)
     sandbox = Sandbox(args.dir)
     agent = Agent(provider=provider, registry=registry, sandbox=sandbox, config=config)
 
