@@ -39,6 +39,7 @@ class AgentConfig:
     stream: bool = True  # stream text deltas when the provider can
     thinking: bool = False  # Anthropic extended thinking (opt-in, billed)
     thinking_budget: int = 2048  # thinking tokens when enabled
+    reflect: bool = False  # one bounded self-review pass after the answer (extra tokens)
     max_retries: int = 5  # retry transient model errors (rate limit, 5xx, timeout)
     # Cap how many recent transcript messages are sent to the model, so long
     # sessions don't grow past the context window. 0 disables trimming. The full

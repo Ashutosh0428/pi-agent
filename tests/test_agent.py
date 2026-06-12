@@ -186,3 +186,44 @@ class TestHistoryTrimming:
         sent = agent._history_for_request()
         assert sent[0]["role"] == "user"  # snapped to a user boundary
         assert len(sent) <= 4
+
+
+class TestReflection:
+    def test_off_by_default_single_pass(self, tmp_path):
+        provider = FakeProvider([_final_step("First answer.")])
+        agent = _make_agent(provider, tmp_path)
+        assert agent.run("do something") == "First answer."
+        assert provider.calls == 1
+
+    def test_reflect_runs_one_review_and_returns_reviewed_text(self, tmp_path):
+        provider = FakeProvider([_final_step("Draft answer."), _final_step("Reviewed answer.")])
+        agent = _make_agent(provider, tmp_path, reflect=True)
+        assert agent.run("do something") == "Reviewed answer."
+        assert provider.calls == 2  # exactly one extra turn, no recursion
+        assert agent.config.reflect is True  # restored after the pass
+        assert agent.config.max_iterations == 25  # restored after the pass
+
+    def test_reflection_can_use_tools_before_final(self, tmp_path):
+        provider = FakeProvider(
+            [
+                _final_step("Draft."),
+                _tool_step(
+                    "fixing",
+                    ToolCall("t1", "write_file", {"path": "fix.py", "content": "ok"}),
+                ),
+                _final_step("Fixed and final."),
+            ]
+        )
+        agent = _make_agent(provider, tmp_path, reflect=True)
+        assert agent.run("task") == "Fixed and final."
+        assert (tmp_path / "fix.py").read_text() == "ok"
+
+    def test_no_reflection_on_max_iteration_stop(self, tmp_path):
+        looping = _tool_step(
+            "again", ToolCall("t1", "write_file", {"path": "a.txt", "content": "x"})
+        )
+        provider = FakeProvider([looping])
+        agent = _make_agent(provider, tmp_path, reflect=True, max_iterations=2)
+        out = agent.run("task")
+        assert out.startswith("Stopped:")
+        assert provider.calls == 2  # no review turn appended

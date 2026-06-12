@@ -77,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Enable extended thinking (Anthropic only; uses extra billed tokens).",
     )
     parser.add_argument(
+        "--reflect",
+        action="store_true",
+        help="After answering, run one bounded self-review pass that re-checks "
+        "the work and fixes problems (uses extra tokens).",
+    )
+    parser.add_argument(
         "--skills-dir",
         help="Directory of skills (<dir>/<skill>/SKILL.md) to inline into the prompt.",
     )
@@ -100,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     config.enable_shell = not args.no_shell
     config.stream = not args.no_stream
     config.thinking = args.think and config.provider == "anthropic"
+    config.reflect = args.reflect
 
     if args.skills_dir:
         from pi_agent.skills import build_system_prompt, load_skills

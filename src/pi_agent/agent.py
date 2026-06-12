@@ -64,6 +64,14 @@ def _is_transient(exc: Exception) -> bool:
     return any(hint in name for hint in _TRANSIENT_NAME_HINTS)
 
 
+REFLECTION_PROMPT = (
+    "Review the work you just did against the user's original request: re-read "
+    "any files you changed and check for bugs, missed requirements, or broken "
+    "imports. Fix real problems with tools. Then give the final answer — "
+    "corrected if you fixed something, otherwise restate it briefly."
+)
+
+
 @dataclass
 class Agent:
     provider: LLMProvider
@@ -176,7 +184,37 @@ class Agent:
         return result or "(sub-agent returned no text)"
 
     def run(self, user_input: str) -> str:
-        """Process one user turn; returns the final assistant text."""
+        """Process one user turn; returns the final assistant text.
+
+        With ``config.reflect`` on, a successful answer is followed by one
+        bounded self-review turn (see :meth:`_reflection_pass`).
+        """
+        answer = self._loop(user_input)
+        if self.config.reflect and answer and not answer.startswith("Stopped:"):
+            answer = self._reflection_pass(answer)
+        return answer
+
+    def _reflection_pass(self, answer: str) -> str:
+        """One self-review turn: re-check the work, fix real problems, restate.
+
+        Bounded (≤5 iterations) and never recursive — ``reflect`` is forced
+        off for the review itself. Falls back to the original answer if the
+        review produces no text.
+        """
+        self._emit("info", "🔍 reflection pass — reviewing the work…")
+        saved_reflect = self.config.reflect
+        saved_iters = self.config.max_iterations
+        self.config.reflect = False
+        self.config.max_iterations = min(saved_iters, 5)
+        try:
+            reviewed = self._loop(REFLECTION_PROMPT)
+        finally:
+            self.config.reflect = saved_reflect
+            self.config.max_iterations = saved_iters
+        return reviewed or answer
+
+    def _loop(self, user_input: str) -> str:
+        """The tool-use loop for one user message."""
         self.messages.append({"role": "user", "content": user_input})
         tools = self.registry.schemas()
 
