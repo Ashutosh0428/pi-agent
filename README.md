@@ -1,8 +1,9 @@
 <h1 align="center">🤖 pi-agent</h1>
 
 <p align="center">
-  <em>A minimal, transparent AI coding agent — multi-provider (paid · free · local),<br/>
-  sandboxed, with a planner, sub-agents, skills, data analysis, and slide generation.</em>
+  <em>Open-source AI coding agent with <b>persistent memory</b>, <b>self-review</b>, and autonomous tool-use —<br/>
+  any model (Claude · GPT · free tiers · local Ollama), skills, sub-agents, data → slides.<br/>
+  Minimal and transparent: you see every tool call, and the whole core fits in your head.</em>
 </p>
 
 <p align="center">
@@ -17,8 +18,10 @@
 <p align="center">
   <b><a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/">🚀 Try it live</a></b> &nbsp;·&nbsp;
   <a href="#-install">Install</a> &nbsp;·&nbsp;
+  <a href="docs/USAGE.md">📖 Usage guide</a> &nbsp;·&nbsp;
   <a href="#-skills">Skills</a> &nbsp;·&nbsp;
-  <a href="#-architecture">Architecture</a>
+  <a href="#-architecture">Architecture</a> &nbsp;·&nbsp;
+  <a href="ROADMAP.md">Roadmap</a>
 </p>
 
 ---
@@ -56,6 +59,9 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 | | |
 |---|---|
 | 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** · **EURI** · **GLM** (free) · **Ollama** (local, no key) — switch mid-chat with `/model`; bare `pi` auto-detects from your env keys |
+| 🧬 **Persistent memory** | the agent saves project facts to `.pi/memory.md` (`remember` tool) and recalls them next session — day 5 continues day 1 |
+| 🔍 **Self-review** | `--reflect`: after answering, one bounded pass that re-checks the work and fixes real problems |
+| 🎯 **Skill routing** | only the most relevant skills are inlined per prompt — leaner prompts, better adherence, cheaper free tiers |
 | 📋 **Planner + live todos** | declares a plan via `update_plan`; the web app renders a live ⬜→⏳→✅ checklist |
 | 🤝 **Sub-agents** | `delegate` a focused subtask to a sequential sub-agent (no recursion) for big jobs |
 | 📦 **Project ZIP upload** | drop a zipped repo (zip-slip-safe) → *"explain this project"* (purpose, flow, components) |
@@ -67,7 +73,8 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 | 📜 **Skills** | `SKILL.md` files inlined into the prompt — 12 bundled, add your own with zero code |
 | 🔒 **Sandboxed & safe** | paths confined to the workspace; public web demo runs no raw shell |
 
-**Tools:** `update_plan` · `delegate` · `read_file` · `write_file` · `edit_file` ·
+**Tools:** `update_plan` · `delegate` · `remember` (persistent memory, local) ·
+`read_file` · `write_file` · `edit_file` · `apply_patch` (atomic multi-file) ·
 `list_dir` · `grep` · `git` (read-only, local) · `web_fetch` (SSRF-guarded, local) ·
 `run_command` (restricted, public-safe) · `run_bash` (full shell, local only) ·
 `analyze_data` · `make_slides`.
@@ -112,6 +119,8 @@ pi --provider gemini --model gemini-3.5-flash "summarise what this project does"
 pi --provider gemini --model gemini-3.1-pro  "deep-review this module"             # paid (student Pro)
 pi --provider ollama --model qwen2.5-coder:7b "write a string-reverse fn and a test"
 pi --skills-dir ./skills "review src/pi_agent/llm.py"
+pi --reflect "refactor utils.py, keep behavior identical"   # + one self-review pass
+pi "remember that this repo uses pytest fixtures, never mocks"  # persists to .pi/memory.md
 pi --no-shell                                               # safe mode (disable run_bash)
 ```
 
@@ -205,10 +214,15 @@ spending a tool call to read them.
 skills/<name>/SKILL.md   # frontmatter (name, description, trigger) + When / How / Avoid / Done-well
 ```
 
-Bundled (12): `planning` · `orchestrate` · `write-tests` · `code-review` ·
-`refactor` · `debug` · `explain-code` · `explain-project` · `architecture` ·
-`write-docs` · `data-analysis` · `make-deck`. Add your own by dropping a new
-folder — no code changes.
+Bundled (18): `planning` · `orchestrate` · `write-tests` · `code-review` ·
+`security-review` · `performance-review` · `refactor` · `debug` · `fix-ci` ·
+`explain-code` · `explain-project` · `architecture` · `write-docs` ·
+`write-readme` · `commit-message` · `api-design` · `data-analysis` ·
+`make-deck`. Add your own by dropping a new folder — no code changes.
+
+**Auto-routing:** pi scores skills against your prompt and inlines only the
+top 3 in full (the index of all 18 stays visible) — leaner prompts, cheaper
+free tiers. `--skills-top-k 0` restores inline-everything.
 
 ## 🛠️ Extending it (the whole point)
 
@@ -229,7 +243,7 @@ transcript, call the API, return an `AssistantResponse`). The agent loop is unch
 ## ✅ Testing
 
 ```bash
-pytest          # 112 tests — scripted fake provider, no API key, no network
+pytest          # 136 tests — scripted fake provider, no API key, no network
 ```
 
 Covers the sandbox boundary, every tool (including the `run_command` RCE guard,
@@ -240,13 +254,10 @@ zip-slip safety.
 
 ## 🗺️ Roadmap
 
-- ~~Read-only `git` tool~~ · ~~`web_fetch`~~ · ~~streaming on every provider~~ — done in 0.3
-- ~~PyPI release~~ · ~~provider auto-detection~~ · ~~web starter prompts + live streaming~~ — done in 0.4
-- `apply_patch` (multi-file edits in one tool call)
-- Token-aware (not count-based) history trimming
-- Charts in `analyze_data`; skill auto-selection by relevance
-
-See [CHANGELOG.md](CHANGELOG.md) for full release notes.
+Next up: **MCP server support**, a local **knowledge base** (`pi ingest docs/`
+→ `pi ask`), **browser automation**, deep-research mode, parallel sub-agents,
+and `pi benchmark` — the full plan with phases lives in
+[ROADMAP.md](ROADMAP.md). Release history: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
