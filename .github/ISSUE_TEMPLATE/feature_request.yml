@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a tool, provider, skill, or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What can't you do today, or what's awkward?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed solution
+      description: A tool? A provider? A skill? Rough sketch is fine.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Alternatives considered

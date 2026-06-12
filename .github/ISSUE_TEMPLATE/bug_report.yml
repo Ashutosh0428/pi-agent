@@ -1,0 +1,36 @@
+name: Bug report
+description: Something broke
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. pi --provider groq "…"
+        2. …
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Provider + model
+      placeholder: groq / llama-3.3-70b-versatile
+  - type: input
+    attributes:
+      label: pi version
+      description: Output of `pi --version`
+      placeholder: pi-agent 0.4.0
+  - type: input
+    attributes:
+      label: OS / Python
+      placeholder: macOS 15 / Python 3.12
+  - type: textarea
+    attributes:
+      label: Logs / output
+      description: Paste relevant output. **Redact your API key.**
+      render: text

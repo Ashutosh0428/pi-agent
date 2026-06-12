@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+dist
+build
+__pycache__
+*.pyc
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.streamlit
+.playwright-mcp
+docs
+tests
+*.png
+.env
