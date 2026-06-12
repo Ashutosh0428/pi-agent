@@ -83,11 +83,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = AgentConfig.from_env()
-    provider, model = resolve_selection(args.provider, args.model)
-    if provider is None:
+    selected_provider, selected_model = resolve_selection(args.provider, args.model)
+    if selected_provider is None:
         _print_onboarding()
         return 1
-    config.provider, config.model = provider, model
+    config.provider, config.model = selected_provider, selected_model
     config.auto_approve = args.yes
     config.enable_shell = not args.no_shell
     config.stream = not args.no_stream
