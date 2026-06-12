@@ -100,11 +100,13 @@ class TestRetry:
 
 class TestDelegate:
     def test_delegate_runs_subagent(self, tmp_path):
-        p = ScriptedProvider([
-            _tool("delegate", {"task": "subtask"}),  # main delegates
-            _final("sub result"),                    # sub-agent finishes
-            _final("main done"),                     # main finishes
-        ])
+        p = ScriptedProvider(
+            [
+                _tool("delegate", {"task": "subtask"}),  # main delegates
+                _final("sub result"),  # sub-agent finishes
+                _final("main done"),  # main finishes
+            ]
+        )
         assert _agent(p, tmp_path).run("big task") == "main done"
         assert p.calls == 3  # main -> sub -> main
 

@@ -35,7 +35,28 @@ from pi_agent.upload import extract_zip_into_sandbox  # noqa: E402
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 STATUS_ICON = {"done": "✅", "in_progress": "⏳", "pending": "⬜"}
-UPLOAD_TYPES = ["zip", "csv", "tsv", "xlsx", "py", "js", "ts", "java", "go", "rs", "c", "cpp", "sh", "txt", "md", "json", "yaml", "yml", "html", "css"]
+UPLOAD_TYPES = [
+    "zip",
+    "csv",
+    "tsv",
+    "xlsx",
+    "py",
+    "js",
+    "ts",
+    "java",
+    "go",
+    "rs",
+    "c",
+    "cpp",
+    "sh",
+    "txt",
+    "md",
+    "json",
+    "yaml",
+    "yml",
+    "html",
+    "css",
+]
 DATA_EXTS = {"csv", "tsv", "xlsx", "json"}
 
 st.set_page_config(
@@ -154,7 +175,8 @@ with st.sidebar:
     use_skills = st.toggle("Use skills (plan, tests, review, debug, …)", value=True)
 
     uploaded = st.file_uploader(
-        "📎 Upload a file or project .zip", type=UPLOAD_TYPES,
+        "📎 Upload a file or project .zip",
+        type=UPLOAD_TYPES,
         help="A file (or a zipped project) lands in the sandbox; then ask "
         "“review <file>” or “explain this project”.",
     )
@@ -166,8 +188,7 @@ with st.sidebar:
                 st.warning(res.error)
             else:
                 st.success(
-                    f"Extracted **{len(res.extracted)}** files — ask me to "
-                    "*explain this project*."
+                    f"Extracted **{len(res.extracted)}** files — ask me to *explain this project*."
                 )
                 if res.skipped:
                     st.caption(f"Skipped {len(res.skipped)} (limits / unsafe paths).")
@@ -178,7 +199,9 @@ with st.sidebar:
                 dest = Path(_sandbox_dir()) / Path(uploaded.name).name
                 try:
                     dest.write_bytes(uploaded.getvalue())
-                    st.success(f"Uploaded **{dest.name}** — ask me to *analyze it* (and make slides).")
+                    st.success(
+                        f"Uploaded **{dest.name}** — ask me to *analyze it* (and make slides)."
+                    )
                 except OSError:
                     st.warning("Could not save that file.")
         elif uploaded.size > 200_000:
@@ -250,10 +273,10 @@ def _get_agent() -> Agent:
         agent = Agent(
             provider=build_provider(model, provider, api_key=api_key),
             registry=build_default_tools(
-                enable_shell=False,          # no raw shell on a public app
-                enable_safe_command=True,    # restricted, read-only run_command is safe
-                enable_subagents=True,       # sequential delegate (no recursion)
-                enable_data=True,            # analyze_data + make_slides (fixed/safe)
+                enable_shell=False,  # no raw shell on a public app
+                enable_safe_command=True,  # restricted, read-only run_command is safe
+                enable_subagents=True,  # sequential delegate (no recursion)
+                enable_data=True,  # analyze_data + make_slides (fixed/safe)
             ),
             sandbox=Sandbox(_sandbox_dir()),
             config=AgentConfig(
@@ -262,7 +285,7 @@ def _get_agent() -> Agent:
                 system_prompt=system_prompt,
                 enable_shell=False,
                 auto_approve=True,  # mutations are confined to the temp sandbox
-                stream=False,       # render plan + tool steps + final answer in Streamlit
+                stream=False,  # render plan + tool steps + final answer in Streamlit
             ),
         )
         st.session_state.agent = agent
@@ -293,7 +316,9 @@ if prompt:
     workspace = all_files[:60]
     effective_prompt = prompt
     if workspace:
-        more = f" (+{len(all_files) - len(workspace)} more)" if len(all_files) > len(workspace) else ""
+        more = (
+            f" (+{len(all_files) - len(workspace)} more)" if len(all_files) > len(workspace) else ""
+        )
         effective_prompt = (
             f"(Files in your working directory: {', '.join(workspace)}{more}. "
             "Use read_file / list_dir to open them before reviewing or editing.)\n\n" + prompt
@@ -346,7 +371,8 @@ if prompt:
 # Downloads — rendered LAST, so a file the agent just created (e.g. a generated
 # .pptx) shows its button on the same run, not only after the next interaction.
 _artifacts = sorted(
-    p for p in Path(_sandbox_dir()).glob("*")
+    p
+    for p in Path(_sandbox_dir()).glob("*")
     if p.is_file() and p.suffix.lower() in (".pptx", ".png", ".pdf", ".csv", ".docx", ".xlsx")
 )
 if _artifacts:

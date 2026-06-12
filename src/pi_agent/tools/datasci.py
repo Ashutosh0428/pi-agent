@@ -51,7 +51,11 @@ def _analyze_data(args: dict[str, Any], sb: Sandbox) -> str:
     except Exception as exc:  # noqa: BLE001 - surface any parse error to the model
         return f"Error reading '{path}': {exc}"
 
-    lines = [f"# Data profile: {target.name}", f"Shape: {df.shape[0]} rows x {df.shape[1]} cols", ""]
+    lines = [
+        f"# Data profile: {target.name}",
+        f"Shape: {df.shape[0]} rows x {df.shape[1]} cols",
+        "",
+    ]
 
     lines.append("## Columns")
     for col in df.columns:
@@ -59,7 +63,9 @@ def _analyze_data(args: dict[str, Any], sb: Sandbox) -> str:
         miss = s.isna().mean() * 100
         info = f"- **{col}** ({s.dtype}), missing {miss:.1f}%"
         if pd.api.types.is_numeric_dtype(s):
-            info += f", mean={s.mean():.3g}, std={s.std():.3g}, min={s.min():.3g}, max={s.max():.3g}"
+            info += (
+                f", mean={s.mean():.3g}, std={s.std():.3g}, min={s.min():.3g}, max={s.max():.3g}"
+            )
         else:
             top = s.value_counts().head(1)
             if not top.empty:

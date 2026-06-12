@@ -18,7 +18,7 @@ def _run_bash(args: dict[str, Any], sb: Sandbox) -> str:
         result = subprocess.run(
             command,
             shell=True,
-            cwd=str(sb.root),          # confine execution to the working dir
+            cwd=str(sb.root),  # confine execution to the working dir
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,

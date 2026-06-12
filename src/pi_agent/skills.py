@@ -72,9 +72,7 @@ def build_system_prompt(base: str, skills: list[Skill]) -> str:
     if not skills:
         return base
 
-    index = "\n".join(
-        f"- **{s.name}** — {s.description or s.trigger or 'skill'}" for s in skills
-    )
+    index = "\n".join(f"- **{s.name}** — {s.description or s.trigger or 'skill'}" for s in skills)
     contents = "\n\n".join(f"#### {s.name}\n{s.content}" for s in skills)
     return (
         f"{base}\n\n"

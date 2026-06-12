@@ -17,11 +17,13 @@ class TestPlanningTool:
     def test_summary_counts(self, tmp_path):
         out = build_default_tools().run(
             "update_plan",
-            {"steps": [
-                {"step": "a", "status": "done"},
-                {"step": "b", "status": "in_progress"},
-                {"step": "c", "status": "pending"},
-            ]},
+            {
+                "steps": [
+                    {"step": "a", "status": "done"},
+                    {"step": "b", "status": "in_progress"},
+                    {"step": "c", "status": "pending"},
+                ]
+            },
             Sandbox(tmp_path),
         )
         assert "3 steps" in out and "1 done" in out and "1 in progress" in out

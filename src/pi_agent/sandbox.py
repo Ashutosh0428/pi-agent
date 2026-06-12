@@ -26,9 +26,7 @@ class Sandbox:
         """
         candidate = (self.root / relative).resolve()
         if candidate != self.root and self.root not in candidate.parents:
-            raise SandboxError(
-                f"Path '{relative}' escapes the sandbox root '{self.root}'."
-            )
+            raise SandboxError(f"Path '{relative}' escapes the sandbox root '{self.root}'.")
         return candidate
 
     def relpath(self, path: Path) -> str:

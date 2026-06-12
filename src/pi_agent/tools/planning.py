@@ -21,9 +21,7 @@ def _update_plan(args: dict[str, Any], sandbox: Sandbox) -> str:  # noqa: ARG001
     if not isinstance(steps, list) or not steps:
         return "Error: 'steps' must be a non-empty list."
     done = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "done")
-    in_progress = sum(
-        1 for s in steps if isinstance(s, dict) and s.get("status") == "in_progress"
-    )
+    in_progress = sum(1 for s in steps if isinstance(s, dict) and s.get("status") == "in_progress")
     return f"Plan updated: {len(steps)} steps ({done} done, {in_progress} in progress)."
 
 
@@ -45,7 +43,10 @@ def planning_tools() -> list[Tool]:
                         "items": {
                             "type": "object",
                             "properties": {
-                                "step": {"type": "string", "description": "Short step description."},
+                                "step": {
+                                    "type": "string",
+                                    "description": "Short step description.",
+                                },
                                 "status": {
                                     "type": "string",
                                     "enum": sorted(_VALID_STATUS),

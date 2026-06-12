@@ -52,9 +52,7 @@ def _list_dir(args: dict[str, Any], sb: Sandbox) -> str:
     path = sb.resolve(args.get("path", "."))
     if not path.is_dir():
         return f"Error: '{args.get('path', '.')}' is not a directory."
-    entries = sorted(
-        p.name + ("/" if p.is_dir() else "") for p in path.iterdir()
-    )
+    entries = sorted(p.name + ("/" if p.is_dir() else "") for p in path.iterdir())
     return "\n".join(entries) if entries else "(empty)"
 
 
@@ -66,7 +64,10 @@ def filesystem_tools() -> list[Tool]:
             input_schema={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "File path relative to the working directory."}
+                    "path": {
+                        "type": "string",
+                        "description": "File path relative to the working directory.",
+                    }
                 },
                 "required": ["path"],
             },
@@ -89,8 +90,7 @@ def filesystem_tools() -> list[Tool]:
         Tool(
             name="edit_file",
             description=(
-                "Replace an exact, unique substring in a file. old_string must "
-                "match exactly once."
+                "Replace an exact, unique substring in a file. old_string must match exactly once."
             ),
             input_schema={
                 "type": "object",

@@ -83,9 +83,7 @@ def make_event_handler(agent: Agent | None = None):
 
 
 def _confirm(call: ToolCall) -> bool:
-    answer = console.input(
-        f"[yellow]Run mutating tool [bold]{call.name}[/bold]? [y/N][/yellow] "
-    )
+    answer = console.input(f"[yellow]Run mutating tool [bold]{call.name}[/bold]? [y/N][/yellow] ")
     return answer.strip().lower() in {"y", "yes"}
 
 
@@ -169,7 +167,7 @@ def run_repl(agent: Agent) -> None:
             console.print(", ".join(agent.registry.names()))
             continue
         if user_input.startswith("/model"):
-            _switch_model(agent, user_input[len("/model"):])
+            _switch_model(agent, user_input[len("/model") :])
             continue
         if user_input == "/think":
             _toggle_thinking(agent)

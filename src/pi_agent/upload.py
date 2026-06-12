@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from pi_agent.sandbox import Sandbox, SandboxError
 
 MAX_FILES = 1000
-MAX_TOTAL_BYTES = 20 * 1024 * 1024      # 20 MB uncompressed total
-MAX_FILE_BYTES = 2 * 1024 * 1024        # 2 MB per file
+MAX_TOTAL_BYTES = 20 * 1024 * 1024  # 20 MB uncompressed total
+MAX_FILE_BYTES = 2 * 1024 * 1024  # 2 MB per file
 _SKIP_PREFIXES = ("__MACOSX/", ".git/")
 
 

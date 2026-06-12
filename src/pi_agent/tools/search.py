@@ -48,7 +48,10 @@ def search_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "pattern": {"type": "string", "description": "Python regex."},
-                    "path": {"type": "string", "description": "Directory to search (default: working dir)."},
+                    "path": {
+                        "type": "string",
+                        "description": "Directory to search (default: working dir).",
+                    },
                 },
                 "required": ["pattern"],
             },
