@@ -11,6 +11,7 @@ from pi_agent.agent import Agent
 from pi_agent.config import AgentConfig
 from pi_agent.llm import PROVIDERS, build_provider, detect_provider, infer_provider
 from pi_agent.sandbox import Sandbox
+from pi_agent.tools.memory import load_memory
 from pi_agent.tools.registry import build_default_tools
 
 # Which environment variable holds the key for each provider. The key itself is
@@ -126,12 +127,19 @@ def main(argv: list[str] | None = None) -> int:
         thinking=config.thinking,
         thinking_budget=config.thinking_budget,
     )
-    # The CLI is always local/trusted, so the read-only git tool and the
-    # SSRF-guarded web_fetch are safe here (both are left off the public demo).
+    # The CLI is always local/trusted, so the read-only git tool, the
+    # SSRF-guarded web_fetch, and persistent memory are safe here (all are
+    # left off the public demo).
     registry = build_default_tools(
-        enable_shell=config.enable_shell, enable_vcs=True, enable_web=True
+        enable_shell=config.enable_shell, enable_vcs=True, enable_web=True, enable_memory=True
     )
     sandbox = Sandbox(args.dir)
+    memory = load_memory(sandbox.root)
+    if memory:
+        config.system_prompt += (
+            "\n\n## Project memory (from earlier sessions)\n"
+            "Facts you saved with the remember tool — apply them without re-deriving:\n" + memory
+        )
     agent = Agent(provider=provider, registry=registry, sandbox=sandbox, config=config)
 
     if args.prompt:

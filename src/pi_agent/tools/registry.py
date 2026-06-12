@@ -8,6 +8,7 @@ from pi_agent.sandbox import Sandbox
 from pi_agent.tools.base import Tool
 from pi_agent.tools.datasci import data_tools
 from pi_agent.tools.filesystem import filesystem_tools
+from pi_agent.tools.memory import memory_tools
 from pi_agent.tools.planning import planning_tools
 from pi_agent.tools.safe_exec import safe_command_tools
 from pi_agent.tools.search import search_tools
@@ -64,6 +65,7 @@ def build_default_tools(
     enable_data: bool = False,
     enable_vcs: bool = False,
     enable_web: bool = False,
+    enable_memory: bool = False,
 ) -> ToolRegistry:
     """Assemble the default tool set.
 
@@ -92,4 +94,6 @@ def build_default_tools(
         tools += git_tools()
     if enable_web:
         tools += web_tools()
+    if enable_memory:
+        tools += memory_tools()
     return ToolRegistry(tools)
