@@ -79,6 +79,13 @@ def main(argv: list[str] | None = None) -> int:
         "--skills-dir",
         help="Directory of skills (<dir>/<skill>/SKILL.md) to inline into the prompt.",
     )
+    parser.add_argument(
+        "--skills-top-k",
+        type=int,
+        default=3,
+        help="One-shot mode: inline only the K most relevant skills (0 = all). "
+        "The REPL always inlines all skills.",
+    )
     parser.add_argument("--version", action="version", version=f"pi-agent {__version__}")
     args = parser.parse_args(argv)
 
@@ -96,8 +103,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.skills_dir:
         from pi_agent.skills import build_system_prompt, load_skills
 
+        one_shot = " ".join(args.prompt) if args.prompt else ""
         config.system_prompt = build_system_prompt(
-            config.system_prompt, load_skills(args.skills_dir)
+            config.system_prompt,
+            load_skills(args.skills_dir),
+            prompt=one_shot,
+            top_k=args.skills_top_k if one_shot else 0,
         )
 
     spec = PROVIDERS[config.provider]

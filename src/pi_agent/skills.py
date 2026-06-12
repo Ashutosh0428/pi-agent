@@ -18,6 +18,7 @@ call to read a skill — the guidance is already in context.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -67,13 +68,41 @@ def load_skills(skills_dir: Path | str | None) -> list[Skill]:
     return skills
 
 
-def build_system_prompt(base: str, skills: list[Skill]) -> str:
-    """Compose the base prompt with a skills index and their full contents."""
+def _tokens(text: str) -> set[str]:
+    """Lowercase alphanumeric tokens for crude relevance scoring."""
+    return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def select_skills(prompt: str, skills: list[Skill], top_k: int) -> list[Skill]:
+    """Rank skills by token overlap with the prompt and keep the ``top_k``.
+
+    Pure and deterministic: score descending, ties broken by name. Zero-score
+    skills never make the cut. ``top_k <= 0`` (or a set already small enough)
+    returns everything — the pre-routing behavior.
+    """
+    if top_k <= 0 or len(skills) <= top_k:
+        return list(skills)
+    prompt_toks = _tokens(prompt)
+    scored = sorted(
+        ((len(prompt_toks & _tokens(f"{s.name} {s.description} {s.trigger}")), s) for s in skills),
+        key=lambda pair: (-pair[0], pair[1].name),
+    )
+    return [s for score, s in scored[:top_k] if score > 0]
+
+
+def build_system_prompt(base: str, skills: list[Skill], *, prompt: str = "", top_k: int = 0) -> str:
+    """Compose the base prompt with a skills index and skill contents.
+
+    With ``top_k > 0`` only the skills most relevant to ``prompt`` are inlined
+    in full (token saver); the one-line index always lists every skill so the
+    model knows what else exists. ``top_k=0`` inlines everything (legacy).
+    """
     if not skills:
         return base
 
+    chosen = select_skills(prompt, skills, top_k) if top_k > 0 else skills
     index = "\n".join(f"- **{s.name}** — {s.description or s.trigger or 'skill'}" for s in skills)
-    contents = "\n\n".join(f"#### {s.name}\n{s.content}" for s in skills)
+    contents = "\n\n".join(f"#### {s.name}\n{s.content}" for s in chosen)
     return (
         f"{base}\n\n"
         "--- Available skills ---\n"

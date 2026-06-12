@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pi_agent.skills import build_system_prompt, load_skills
+from pi_agent.skills import Skill, build_system_prompt, load_skills, select_skills
 
 SKILL_MD = """\
 ---
@@ -60,3 +60,51 @@ class TestBuildSystemPrompt:
         assert "Skills index" in prompt
         assert "write-tests" in prompt
         assert "happy path" in prompt  # full content inlined
+
+
+def _skill(name: str, description: str = "", trigger: str = "", content: str = "BODY") -> Skill:
+    return Skill(name=name, description=description, trigger=trigger, content=content)
+
+
+class TestSelectSkills:
+    SKILLS = [
+        _skill("write-tests", "Write focused pytest tests", "asked for tests", "TESTS-BODY"),
+        _skill("debug", "Find and fix bugs from a traceback", "an error occurs", "DEBUG-BODY"),
+        _skill("make-deck", "Build a pptx slide deck", "asked for slides", "DECK-BODY"),
+        _skill("refactor", "Restructure code safely", "asked to refactor", "REFACTOR-BODY"),
+    ]
+
+    def test_picks_most_relevant(self):
+        chosen = select_skills("please write pytest tests for utils", self.SKILLS, top_k=1)
+        assert [s.name for s in chosen] == ["write-tests"]
+
+    def test_deterministic_tie_break_by_name(self):
+        tied = [_skill("b-skill", "zzz"), _skill("a-skill", "zzz")]
+        chosen = select_skills("zzz", tied + [_skill("c-skill", "qqq")], top_k=2)
+        assert [s.name for s in chosen] == ["a-skill", "b-skill"]
+
+    def test_zero_score_skills_excluded(self):
+        chosen = select_skills("completely unrelated words here", self.SKILLS, top_k=2)
+        assert chosen == []
+
+    def test_top_k_zero_returns_all(self):
+        assert select_skills("anything", self.SKILLS, top_k=0) == self.SKILLS
+
+    def test_small_set_returned_whole(self):
+        two = self.SKILLS[:2]
+        assert select_skills("unrelated", two, top_k=3) == two
+
+
+class TestRoutedSystemPrompt:
+    def test_top_k_inlines_only_relevant_content_but_full_index(self):
+        skills = TestSelectSkills.SKILLS
+        prompt = build_system_prompt("BASE", skills, prompt="fix this bug traceback", top_k=1)
+        assert "DEBUG-BODY" in prompt  # routed skill inlined
+        assert "DECK-BODY" not in prompt  # unrelated content omitted
+        assert "make-deck" in prompt  # but still listed in the index
+
+    def test_top_k_zero_keeps_legacy_inline_all(self):
+        skills = TestSelectSkills.SKILLS
+        prompt = build_system_prompt("BASE", skills, prompt="", top_k=0)
+        for s in skills:
+            assert s.content in prompt
