@@ -26,6 +26,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
+from pi_agent import guardrails
 from pi_agent.config import AgentConfig
 from pi_agent.llm import (
     AssistantResponse,
@@ -164,6 +165,40 @@ class Agent:
         )
         return response, False
 
+    def _dispatch(self, call: ToolCall) -> str:
+        """Run one tool call through the guardrails, then return its output.
+
+        The single choke-point every tool flows through, so the CLI and the
+        web app are guarded identically: block secret exfiltration, force
+        confirmation on destructive shell commands (even under auto-approve),
+        then redact + spotlight the result.
+        """
+        gr = self.config.guardrails
+
+        block = guardrails.check_exfiltration(call.name, call.args, gr)
+        if block is not None:
+            self._emit("info", f"🛡️ {block}")
+            return block
+
+        if call.name == "delegate":
+            return self._run_subagent(call.args)
+
+        forced_confirm = guardrails.is_destructive(call.name, call.args, gr)
+        if forced_confirm and not self._confirm_destructive(call):
+            return "Blocked by guardrail: destructive command not confirmed."
+        if not forced_confirm and not self._should_run(call):
+            return "Skipped by user."
+
+        output = self.registry.run(call.name, call.args, self.sandbox)
+        return guardrails.guard_output(call.name, output, gr)
+
+    def _confirm_destructive(self, call: ToolCall) -> bool:
+        """Confirm a destructive command — ignores auto-approve on purpose."""
+        self._emit("info", f"⚠️ destructive command flagged: {call.name}")
+        if self.confirm is None:
+            return False  # non-interactive: refuse rather than run blindly
+        return self.confirm(call)
+
     def _run_subagent(self, args: dict[str, Any]) -> str:
         """Run a focused sub-agent to completion on the same workspace."""
         task = (args.get("task") or "").strip()
@@ -244,13 +279,7 @@ class Agent:
                 if call.name == "update_plan":
                     self._emit("plan", call.args.get("steps", []))
 
-                if call.name == "delegate":
-                    output = self._run_subagent(call.args)
-                elif self._should_run(call):
-                    output = self.registry.run(call.name, call.args, self.sandbox)
-                else:
-                    output = "Skipped by user."
-
+                output = self._dispatch(call)
                 self._emit("tool_result", {"call": call, "output": output})
                 results.append(ToolResult(id=call.id, name=call.name, output=output))
 

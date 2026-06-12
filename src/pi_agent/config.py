@@ -7,7 +7,9 @@ options are easy to add later.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from pi_agent.guardrails import GuardrailConfig
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -45,6 +47,7 @@ class AgentConfig:
     # sessions don't grow past the context window. 0 disables trimming. The full
     # transcript is still kept locally (for /cost); only the request is trimmed.
     max_history_messages: int = 80
+    guardrails: GuardrailConfig = field(default_factory=GuardrailConfig)
 
     @classmethod
     def from_env(cls) -> "AgentConfig":

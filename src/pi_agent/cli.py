@@ -9,6 +9,7 @@ import sys
 from pi_agent import __version__
 from pi_agent.agent import Agent
 from pi_agent.config import AgentConfig
+from pi_agent.guardrails import GuardrailConfig
 from pi_agent.llm import PROVIDERS, build_provider, detect_provider, infer_provider
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.memory import load_memory
@@ -83,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
         "the work and fixes problems (uses extra tokens).",
     )
     parser.add_argument(
+        "--no-guardrails",
+        action="store_true",
+        help="Disable safety guardrails (secret-exfiltration block, destructive-"
+        "command confirmation, output redaction). Not recommended.",
+    )
+    parser.add_argument(
         "--skills-dir",
         help="Directory of skills (<dir>/<skill>/SKILL.md) to inline into the prompt.",
     )
@@ -107,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     config.stream = not args.no_stream
     config.thinking = args.think and config.provider == "anthropic"
     config.reflect = args.reflect
+    if args.no_guardrails:
+        config.guardrails = GuardrailConfig(enabled=False)
 
     if args.skills_dir:
         from pi_agent.skills import build_system_prompt, load_skills

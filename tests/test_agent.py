@@ -227,3 +227,37 @@ class TestReflection:
         out = agent.run("task")
         assert out.startswith("Stopped:")
         assert provider.calls == 2  # no review turn appended
+
+
+class TestGuardrailsInLoop:
+    def test_destructive_forces_confirm_even_under_auto_approve(self, tmp_path):
+        called = _tool_step("deleting", ToolCall("t1", "run_bash", {"command": "rm -rf /"}))
+        provider = FakeProvider([called, _final_step("done")])
+        seen = {"confirmed": False}
+
+        def deny(_call):
+            seen["confirmed"] = True
+            return False  # user says no
+
+        agent = _make_agent(provider, tmp_path)  # auto_approve=True
+        agent.confirm = deny
+        agent.run("clean up")
+        assert seen["confirmed"] is True  # confirm was demanded despite auto_approve
+
+    def test_destructive_blocked_when_non_interactive(self, tmp_path):
+        called = _tool_step("rm", ToolCall("t1", "run_bash", {"command": "sudo rm -rf /"}))
+        provider = FakeProvider([called, _final_step("done")])
+        agent = _make_agent(provider, tmp_path)  # no confirm hook
+        agent.run("danger")
+        # the tool result fed back must be the guardrail block, not execution
+        tool_msg = next(m for m in agent.messages if m["role"] == "tool")
+        assert "Blocked by guardrail" in tool_msg["results"][0].output
+
+    def test_safe_command_runs_normally(self, tmp_path):
+        called = _tool_step(
+            "writing", ToolCall("t1", "write_file", {"path": "ok.txt", "content": "hi"})
+        )
+        provider = FakeProvider([called, _final_step("done")])
+        agent = _make_agent(provider, tmp_path)
+        agent.run("make a file")
+        assert (tmp_path / "ok.txt").read_text() == "hi"
