@@ -122,6 +122,61 @@ def _available_models(provider: str, key: str) -> list[str]:
         return []
 
 
+_LANG_BY_EXT = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".java": "java",
+    ".go": "go",
+    ".rs": "rust",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".sh": "bash",
+    ".md": "markdown",
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".html": "html",
+    ".css": "css",
+}
+_IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif"}
+_ARTIFACT_EXTS = {".pptx", ".pdf", ".docx", ".xlsx"}
+_MAX_VIEW_BYTES = 200_000
+
+
+def _render_workspace_browser() -> None:
+    """Always-available view of every workspace file (uploaded or agent-made).
+
+    Rendered last so files created during *this* turn are already visible —
+    pick a file to read it with syntax highlighting, or download it.
+    """
+    root = Path(_sandbox_dir())
+    files = sorted(p for p in root.rglob("*") if p.is_file())
+    if not files:
+        return
+    rels = [str(p.relative_to(root)) for p in files]
+    has_artifact = any(p.suffix.lower() in _ARTIFACT_EXTS for p in files)
+    with st.expander(f"🗂️ Workspace files ({len(rels)}) — view & download", expanded=has_artifact):
+        sel = st.selectbox("File", rels, key="wb_file")
+        path = root / sel
+        st.download_button(
+            f"⬇ Download {Path(sel).name}",
+            data=path.read_bytes(),
+            file_name=Path(sel).name,
+            key=f"wb_dl_{sel}",
+        )
+        suffix = path.suffix.lower()
+        if suffix in _IMG_EXTS:
+            st.image(str(path))
+        elif path.stat().st_size > _MAX_VIEW_BYTES:
+            st.caption(f"{path.stat().st_size:,} bytes — too large to preview, download instead.")
+        else:
+            try:
+                st.code(path.read_text(encoding="utf-8"), language=_LANG_BY_EXT.get(suffix, "text"))
+            except UnicodeDecodeError:
+                st.caption("Binary file — download instead.")
+
+
 def _render_plan(box, steps) -> None:
     rows = [
         f"{STATUS_ICON.get(s.get('status'), '⬜')} {s.get('step', '')}"
@@ -218,11 +273,37 @@ with st.sidebar:
                 st.warning("Could not save that file.")
 
     if st.button("🧹 Clear conversation", use_container_width=True):
-        for k in ("messages", "agent", "agent_key"):
+        for k in ("messages", "agent", "agent_key", "sess_in", "sess_out"):
             st.session_state.pop(k, None)
         st.rerun()
 
+    if st.session_state.get("messages"):
+        _transcript = "\n\n".join(
+            f"**{m['role']}**:\n\n{m['content']}" for m in st.session_state.messages
+        )
+        st.download_button(
+            "💬 Download chat (.md)",
+            _transcript,
+            file_name="pi-agent-chat.md",
+            use_container_width=True,
+        )
+
     st.markdown("---")
+    _cost_box = st.empty()
+
+    def _render_session_meter() -> None:
+        tin = st.session_state.get("sess_in", 0)
+        tout = st.session_state.get("sess_out", 0)
+        if not (tin or tout):
+            return
+        if spec.free:
+            tail = "🆓 free tier"
+        else:
+            est = estimate_cost(model, Usage(tin, tout))
+            tail = f"~${est:.4f}" if est is not None else "cost n/a"
+        _cost_box.caption(f"📊 Session: {tin + tout:,} tokens · {tail}")
+
+    _render_session_meter()
     st.caption(
         "🔒 **Safe demo:** shell disabled, file tools sandboxed to a temporary "
         "per-session folder. Your key stays in your session."
@@ -352,6 +433,13 @@ if prompt:
             "Use read_file / list_dir to open them before reviewing or editing.)\n\n" + prompt
         )
 
+    # Route the most relevant skills for THIS prompt (token saver on free tiers);
+    # the index of all skills stays in the prompt so the model knows the rest.
+    if use_skills:
+        agent.config.system_prompt = build_system_prompt(
+            SYSTEM_PROMPT, load_skills(SKILLS_DIR), prompt=prompt, top_k=3
+        )
+
     with st.chat_message("assistant"):
         plan_box = st.empty()
         status = st.status("pi is working…", expanded=True)
@@ -394,28 +482,19 @@ if prompt:
                 detail = detail.replace(api_key, "***")
             st.error(f"Request failed ({type(exc).__name__}): {detail[:500]}")
 
-        files = sorted(p.name for p in Path(_sandbox_dir()).glob("*") if p.is_file())
-        cols = st.columns(2)
-        if files:
-            cols[0].caption("🗂️ workspace: " + ", ".join(files))
         tok = usage_box["in"] + usage_box["out"]
         if spec.free:
-            cols[1].caption(f"🆓 free tier · {tok} tokens" if tok else "🆓 free tier")
+            st.caption(f"🆓 free tier · {tok} tokens" if tok else "🆓 free tier")
         elif tok:
             est = estimate_cost(model, Usage(usage_box["in"], usage_box["out"]))
-            cols[1].caption(f"📊 {tok} tokens" + (f" · ~${est:.4f}" if est is not None else ""))
+            st.caption(f"📊 {tok} tokens" + (f" · ~${est:.4f}" if est is not None else ""))
+
+        # Session totals (sidebar meter) — accumulated across turns.
+        st.session_state.sess_in = st.session_state.get("sess_in", 0) + usage_box["in"]
+        st.session_state.sess_out = st.session_state.get("sess_out", 0) + usage_box["out"]
+        _render_session_meter()
 
 
-# Downloads — rendered LAST, so a file the agent just created (e.g. a generated
-# .pptx) shows its button on the same run, not only after the next interaction.
-_artifacts = sorted(
-    p
-    for p in Path(_sandbox_dir()).glob("*")
-    if p.is_file() and p.suffix.lower() in (".pptx", ".png", ".pdf", ".csv", ".docx", ".xlsx")
-)
-if _artifacts:
-    st.markdown("### 📥 Downloads")
-    for _p in _artifacts:
-        st.download_button(
-            f"⬇ {_p.name}", data=_p.read_bytes(), file_name=_p.name, key=f"dl_{_p.name}"
-        )
+# Workspace browser — rendered LAST, so files the agent created during this
+# very turn (code, decks, reports) are already listed, viewable, downloadable.
+_render_workspace_browser()
