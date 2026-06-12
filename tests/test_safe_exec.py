@@ -28,6 +28,19 @@ class TestRunCommand:
         out = _registry().run("run_command", {"command": "python -c x"}, Sandbox(tmp_path))
         assert "not allowed" in out
 
+    def test_find_is_not_allowed(self, tmp_path):
+        # find's -exec/-delete primaries make it an allowlist-bypass launcher.
+        out = _registry().run("run_command", {"command": "find . -name x"}, Sandbox(tmp_path))
+        assert "not allowed" in out
+
+    def test_rejects_dangerous_exec_flag(self, tmp_path):
+        # Defense in depth: the -exec flag is blocked for any program, so it can
+        # never be used to launch an arbitrary process even if find were allowed.
+        out = _registry().run(
+            "run_command", {"command": "grep -exec sh -c id x"}, Sandbox(tmp_path)
+        )
+        assert "blocked" in out
+
     def test_rejects_absolute_path(self, tmp_path):
         out = _registry().run("run_command", {"command": "cat /etc/passwd"}, Sandbox(tmp_path))
         assert "outside the sandbox" in out

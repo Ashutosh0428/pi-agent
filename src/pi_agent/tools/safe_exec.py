@@ -12,6 +12,13 @@ Unlike ``run_bash`` (raw shell, local use only), ``run_command``:
 It executes processes on the host, but confined to read-only inspection inside
 the sandbox directory — acceptable for an untrusted/public context where
 ``run_bash`` would be a remote-code-execution hole.
+
+``find`` is deliberately **not** allowed: its ``-exec``/``-delete`` primaries
+turn it into a launcher for arbitrary programs (e.g. ``find . -exec sh -c …``),
+which would bypass this whole allowlist. File discovery is already covered by the
+dedicated ``grep`` tool and ``list_dir``/``ls``. As defense in depth we also
+reject the dangerous argument flags outright, so re-adding such a program later
+cannot silently reopen the hole.
 """
 
 from __future__ import annotations
@@ -23,7 +30,19 @@ from typing import Any
 from pi_agent.sandbox import Sandbox
 from pi_agent.tools.base import Tool
 
-ALLOWED = {"ls", "cat", "head", "tail", "wc", "grep", "find"}
+ALLOWED = {"ls", "cat", "head", "tail", "wc", "grep"}
+# Argument flags that let an otherwise read-only program execute, write, or
+# delete. Rejected for every command, regardless of the program in ALLOWED.
+_DANGEROUS_FLAGS = {
+    "-exec",
+    "-execdir",
+    "-ok",
+    "-okdir",  # find: run arbitrary programs
+    "-delete",  # find: delete files
+    "-fprint",
+    "-fprintf",
+    "-fls",  # find: write to arbitrary files
+}
 _SAFE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LANG": "C.UTF-8"}
 MAX_OUTPUT = 4000
 TIMEOUT_SECONDS = 10
@@ -52,6 +71,8 @@ def _run_command(args: dict[str, Any], sb: Sandbox) -> str:
         return f"Error: '{cmd}' is not allowed. Allowed: {', '.join(sorted(ALLOWED))}."
 
     for tok in tokens[1:]:
+        if tok in _DANGEROUS_FLAGS:
+            return f"Error: '{tok}' is blocked (it can execute, write, or delete)."
         if not tok.startswith("-") and _is_unsafe_path(tok):
             return (
                 f"Error: '{tok}' points outside the sandbox "
@@ -95,7 +116,7 @@ def safe_command_tools() -> list[Tool]:
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "A single command, e.g. \"grep -rn def app.py\".",
+                        "description": 'A single command, e.g. "grep -rn def app.py".',
                     }
                 },
                 "required": ["command"],
