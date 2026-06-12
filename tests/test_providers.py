@@ -6,8 +6,11 @@ format, which is what makes pi genuinely multi-provider.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from pi_agent.llm import (
     PROVIDERS,
+    OpenAIProvider,
     ToolCall,
     ToolResult,
     Usage,
@@ -17,6 +20,28 @@ from pi_agent.llm import (
     to_openai_messages,
     to_openai_tools,
 )
+
+
+def _text_chunk(content: str | None = None, finish: str | None = None):
+    """A streaming chunk carrying a text delta (and optional finish_reason)."""
+    delta = SimpleNamespace(content=content, tool_calls=None)
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish)], usage=None)
+
+
+def _tool_chunk(index, *, id=None, name=None, arguments=None, finish=None):
+    """A streaming chunk carrying one tool-call fragment."""
+    fn = SimpleNamespace(name=name, arguments=arguments)
+    tc = SimpleNamespace(index=index, id=id, function=fn)
+    delta = SimpleNamespace(content=None, tool_calls=[tc])
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=finish)], usage=None)
+
+
+def _usage_chunk(prompt, completion):
+    """The trailing usage-only chunk (no choices) emitted with include_usage."""
+    return SimpleNamespace(
+        choices=[], usage=SimpleNamespace(prompt_tokens=prompt, completion_tokens=completion)
+    )
+
 
 # A small transcript: user -> assistant calls a tool -> tool result -> user.
 TRANSCRIPT = [
@@ -91,6 +116,61 @@ class TestOpenAITranslation:
         fn = wrapped[0]["function"]
         assert fn["name"] == "list_dir"
         assert fn["parameters"]["required"] == ["path"]
+
+
+class TestOpenAIStreaming:
+    """The chunk-assembly logic — pure, so testable without the SDK or network."""
+
+    def test_text_deltas_forwarded_and_assembled(self):
+        seen: list[str] = []
+        resp = OpenAIProvider._consume_stream(
+            [_text_chunk("Hel"), _text_chunk("lo"), _text_chunk(finish="stop")],
+            seen.append,
+        )
+        assert seen == ["Hel", "lo"]  # streamed live, in order
+        assert resp.text == "Hello"
+        assert resp.stop_reason == "stop"
+        assert resp.tool_calls == []
+
+    def test_tool_call_fragments_reassembled(self):
+        # id, name, then arguments split across chunks — all under index 0.
+        chunks = [
+            _tool_chunk(0, id="call_1", name="list_dir"),
+            _tool_chunk(0, arguments='{"pa'),
+            _tool_chunk(0, arguments='th": "."}', finish="tool_calls"),
+        ]
+        resp = OpenAIProvider._consume_stream(chunks, lambda _: None)
+        assert resp.text == ""
+        assert len(resp.tool_calls) == 1
+        call = resp.tool_calls[0]
+        assert call.id == "call_1"
+        assert call.name == "list_dir"
+        assert call.args == {"path": "."}  # parsed only after the stream ends
+
+    def test_two_parallel_tool_calls_kept_separate(self):
+        chunks = [
+            _tool_chunk(0, id="a", name="read_file", arguments='{"path":"x"}'),
+            _tool_chunk(1, id="b", name="read_file", arguments='{"path":"y"}'),
+        ]
+        resp = OpenAIProvider._consume_stream(chunks, lambda _: None)
+        assert [c.id for c in resp.tool_calls] == ["a", "b"]
+        assert [c.args["path"] for c in resp.tool_calls] == ["x", "y"]
+
+    def test_usage_only_final_chunk(self):
+        resp = OpenAIProvider._consume_stream(
+            [_text_chunk("hi"), _usage_chunk(12, 3)], lambda _: None
+        )
+        assert resp.usage == Usage(12, 3)
+
+    def test_malformed_tool_args_coerced_to_empty(self):
+        resp = OpenAIProvider._consume_stream(
+            [_tool_chunk(0, id="c", name="t", arguments="null")], lambda _: None
+        )
+        assert resp.tool_calls[0].args == {}
+
+    def test_openai_provider_advertises_streaming(self):
+        assert OpenAIProvider.supports_streaming is True
+        assert hasattr(OpenAIProvider, "stream")
 
 
 class TestProviderInference:

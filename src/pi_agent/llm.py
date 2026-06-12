@@ -193,7 +193,11 @@ class LLMProvider(Protocol):
 
     name: str
     model: str
-    supports_streaming: bool
+
+    # Read-only so both a computed @property (Anthropic) and a plain field
+    # (OpenAI) satisfy it.
+    @property
+    def supports_streaming(self) -> bool: ...
 
     def complete(
         self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
@@ -248,7 +252,9 @@ class AnthropicProvider:
             if block.type == "text":
                 text_parts.append(block.text)
             elif block.type == "tool_use":
-                tool_calls.append(ToolCall(id=block.id, name=block.name, args=dict(block.input or {})))
+                tool_calls.append(
+                    ToolCall(id=block.id, name=block.name, args=dict(block.input or {}))
+                )
             # "thinking" blocks are intentionally not surfaced to the transcript.
         return "".join(text_parts), tool_calls
 
@@ -286,6 +292,16 @@ class AnthropicProvider:
         )
 
 
+def _coerce_args(raw: str | None) -> dict[str, Any]:
+    """Parse a tool-call argument JSON string, tolerating junk from weak models."""
+    try:
+        parsed = json.loads(raw or "{}")
+    except (ValueError, TypeError):
+        return {}
+    # Weaker models sometimes emit "null" or a non-object — coerce to {}.
+    return parsed if isinstance(parsed, dict) else {}
+
+
 @dataclass
 class OpenAIProvider:
     """OpenAI (and OpenAI-compatible) provider via Chat Completions."""
@@ -295,38 +311,33 @@ class OpenAIProvider:
     base_url: str | None = None
     max_tokens: int = 4096
     name: str = field(default="openai", init=False)
-    supports_streaming: bool = field(default=False, init=False)
+    supports_streaming: bool = field(default=True, init=False)
 
     def __post_init__(self) -> None:
         import openai
 
         self._client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
 
+    def _payload(
+        self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "messages": to_openai_messages(system, messages),
+            "tools": to_openai_tools(tools),
+            "max_tokens": self.max_tokens,  # explicit: some proxies (EURI) inject a too-large default
+        }
+
     def complete(
         self, system: str, messages: list[NeutralMessage], tools: list[dict[str, Any]]
     ) -> AssistantResponse:
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=to_openai_messages(system, messages),
-            tools=to_openai_tools(tools),
-            max_tokens=self.max_tokens,  # explicit: some proxies (EURI) inject a too-large default
-        )
+        response = self._client.chat.completions.create(**self._payload(system, messages, tools))
         choice = response.choices[0]
         message = choice.message
-        tool_calls = []
-        for tc in message.tool_calls or []:
-            try:
-                parsed = json.loads(tc.function.arguments or "{}")
-            except (ValueError, TypeError):
-                parsed = {}
-            # Weaker models sometimes emit "null" or a non-object — coerce to {}.
-            tool_calls.append(
-                ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    args=parsed if isinstance(parsed, dict) else {},
-                )
-            )
+        tool_calls = [
+            ToolCall(id=tc.id, name=tc.function.name, args=_coerce_args(tc.function.arguments))
+            for tc in (message.tool_calls or [])
+        ]
         usage = Usage(0, 0)
         if response.usage is not None:
             usage = Usage(response.usage.prompt_tokens, response.usage.completion_tokens)
@@ -336,6 +347,82 @@ class OpenAIProvider:
             usage=usage,
             stop_reason=choice.finish_reason or "",
         )
+
+    def _open_stream(self, payload: dict[str, Any]) -> Any:
+        """Open a streaming completion, asking for usage when the server allows.
+
+        ``stream_options`` is an OpenAI extension; some compatible servers reject
+        it. If so, fall back to a plain stream (usage just won't be reported).
+        """
+        try:
+            return self._client.chat.completions.create(
+                **payload, stream=True, stream_options={"include_usage": True}
+            )
+        except Exception as exc:  # noqa: BLE001 - re-raised unless it's the known case
+            if isinstance(exc, TypeError) or getattr(exc, "status_code", None) == 400:
+                return self._client.chat.completions.create(**payload, stream=True)
+            raise
+
+    @staticmethod
+    def _consume_stream(chunks: Any, on_delta: DeltaCallback) -> AssistantResponse:
+        """Assemble a streamed Chat Completion into one normalised turn.
+
+        Text deltas are forwarded to ``on_delta`` as they arrive; tool calls are
+        delivered in fragments (id, name, then partial-JSON arguments) keyed by
+        ``index``, so they are accumulated and parsed only once the stream ends.
+        """
+        text_parts: list[str] = []
+        frags: dict[int, dict[str, str]] = {}
+        usage = Usage(0, 0)
+        stop_reason = ""
+        for chunk in chunks:
+            cu = getattr(chunk, "usage", None)
+            if cu is not None:
+                usage = Usage(cu.prompt_tokens, cu.completion_tokens)
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue  # usage-only final chunk has no choices
+            choice = choices[0]
+            if getattr(choice, "finish_reason", None):
+                stop_reason = choice.finish_reason
+            delta = getattr(choice, "delta", None)
+            if delta is None:
+                continue
+            content = getattr(delta, "content", None)
+            if content:
+                text_parts.append(content)
+                on_delta(content)
+            for tc in getattr(delta, "tool_calls", None) or []:
+                frag = frags.setdefault(getattr(tc, "index", 0), {"id": "", "name": "", "args": ""})
+                if getattr(tc, "id", None):
+                    frag["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn is not None:
+                    if getattr(fn, "name", None):
+                        frag["name"] = fn.name
+                    if getattr(fn, "arguments", None):
+                        frag["args"] += fn.arguments
+        tool_calls = [
+            ToolCall(id=frags[i]["id"], name=frags[i]["name"], args=_coerce_args(frags[i]["args"]))
+            for i in sorted(frags)
+        ]
+        return AssistantResponse(
+            text="".join(text_parts),
+            tool_calls=tool_calls,
+            usage=usage,
+            stop_reason=stop_reason,
+        )
+
+    def stream(
+        self,
+        system: str,
+        messages: list[NeutralMessage],
+        tools: list[dict[str, Any]],
+        on_delta: DeltaCallback,
+    ) -> AssistantResponse:
+        """Stream text deltas via ``on_delta``; return the full normalised turn."""
+        chunks = self._open_stream(self._payload(system, messages, tools))
+        return self._consume_stream(chunks, on_delta)
 
 
 def infer_provider(model: str) -> str:
@@ -354,13 +441,13 @@ class ProviderSpec:
     """Static facts about a provider, used to build it and to drive the UI."""
 
     name: str
-    kind: str             # "anthropic" or "openai" (which client to use)
+    kind: str  # "anthropic" or "openai" (which client to use)
     default_model: str
-    key_env: str          # environment variable holding the key
-    key_url: str          # where a user gets a key
-    base_url: str | None = None   # OpenAI-compatible endpoint (Groq / OpenRouter / Ollama)
-    free: bool = False    # has a usable free tier (no credit card)
-    requires_key: bool = True     # Ollama (local) needs no key
+    key_env: str  # environment variable holding the key
+    key_url: str  # where a user gets a key
+    base_url: str | None = None  # OpenAI-compatible endpoint (Groq / OpenRouter / Ollama)
+    free: bool = False  # has a usable free tier (no credit card)
+    requires_key: bool = True  # Ollama (local) needs no key
     models: tuple[str, ...] = ()  # suggested model ids for the UI picker (any id still works)
 
 
@@ -368,58 +455,88 @@ class ProviderSpec:
 # base_url — no new client code. Both offer free keys + strong free models.
 PROVIDERS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
-        "anthropic", "anthropic", "claude-sonnet-4-6",
-        "ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys",
+        "anthropic",
+        "anthropic",
+        "claude-sonnet-4-6",
+        "ANTHROPIC_API_KEY",
+        "https://console.anthropic.com/settings/keys",
         models=("claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"),
     ),
     "openai": ProviderSpec(
-        "openai", "openai", "gpt-4o-mini",
-        "OPENAI_API_KEY", "https://platform.openai.com/api-keys",
+        "openai",
+        "openai",
+        "gpt-4o-mini",
+        "OPENAI_API_KEY",
+        "https://platform.openai.com/api-keys",
         models=("gpt-4o-mini", "gpt-4o", "gpt-4.1", "o4-mini"),
     ),
     "groq": ProviderSpec(
-        "groq", "openai", "llama-3.3-70b-versatile",
-        "GROQ_API_KEY", "https://console.groq.com/keys",
-        base_url="https://api.groq.com/openai/v1", free=True,
+        "groq",
+        "openai",
+        "llama-3.3-70b-versatile",
+        "GROQ_API_KEY",
+        "https://console.groq.com/keys",
+        base_url="https://api.groq.com/openai/v1",
+        free=True,
         models=("llama-3.3-70b-versatile", "llama-3.1-8b-instant"),
     ),
     "openrouter": ProviderSpec(
-        "openrouter", "openai", "meta-llama/llama-3.3-70b-instruct:free",
-        "OPENROUTER_API_KEY", "https://openrouter.ai/keys",
-        base_url="https://openrouter.ai/api/v1", free=True,
+        "openrouter",
+        "openai",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "OPENROUTER_API_KEY",
+        "https://openrouter.ai/keys",
+        base_url="https://openrouter.ai/api/v1",
+        free=True,
         models=("meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat"),
     ),
     # Google Gemini exposes an OpenAI-compatible endpoint, so it reuses
     # OpenAIProvider. Free tier + paid (Pro) models; supports function calling.
     "gemini": ProviderSpec(
-        "gemini", "openai", "gemini-3.5-flash",
-        "GEMINI_API_KEY", "https://aistudio.google.com/apikey",
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/", free=True,
+        "gemini",
+        "openai",
+        "gemini-3.5-flash",
+        "GEMINI_API_KEY",
+        "https://aistudio.google.com/apikey",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        free=True,
         models=("gemini-3.5-flash", "gemini-3.1-pro", "gemini-3.1-flash", "gemini-2.5-flash"),
     ),
     # EURI — OpenAI-compatible aggregator (40+ models) with a free tier. Tool
     # calling depends on EURI passing `tools` through to a tool-capable model;
     # use "list models" + try one if the agent doesn't call tools.
     "euri": ProviderSpec(
-        "euri", "openai", "gpt-4o-mini",
-        "EURI_API_KEY", "https://docs.euri.ai/",
-        base_url="https://api.euron.one/api/v1/euri", free=True,
+        "euri",
+        "openai",
+        "gpt-4o-mini",
+        "EURI_API_KEY",
+        "https://docs.euri.ai/",
+        base_url="https://api.euron.one/api/v1/euri",
+        free=True,
         models=("gpt-4o-mini", "gpt-4.1-nano"),  # 40+ available — use "list models" for the rest
     ),
     # Z.ai / Zhipu GLM — OpenAI-compatible; GLM models support tool calling.
     # Free model: glm-4.5-flash; GLM-5/5.1 are paid. Real ids come from "list models".
     "glm": ProviderSpec(
-        "glm", "openai", "glm-4.5-flash",
-        "ZAI_API_KEY", "https://z.ai/manage-apikey/apikey-list",
+        "glm",
+        "openai",
+        "glm-4.5-flash",
+        "ZAI_API_KEY",
+        "https://z.ai/manage-apikey/apikey-list",
         base_url="https://api.z.ai/api/paas/v4",
         models=("glm-4.5-flash", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.5-air"),
     ),
     # Local + private + free: runs against an Ollama server on the same machine.
     # No key needed; only reachable when pi runs locally (not on cloud hosting).
     "ollama": ProviderSpec(
-        "ollama", "openai", "qwen2.5-coder:7b",
-        "OLLAMA_API_KEY", "https://ollama.com/download",
-        base_url="http://localhost:11434/v1", free=True, requires_key=False,
+        "ollama",
+        "openai",
+        "qwen2.5-coder:7b",
+        "OLLAMA_API_KEY",
+        "https://ollama.com/download",
+        base_url="http://localhost:11434/v1",
+        free=True,
+        requires_key=False,
         models=("qwen2.5-coder:7b", "llama3.1", "deepseek-coder"),
     ),
 }
