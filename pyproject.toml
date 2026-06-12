@@ -1,27 +1,71 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pi-agent"
-version = "0.3.0"
-description = "A minimal terminal AI coding agent (LLM tool-use loop)."
+name = "pi-coding-agent"
+dynamic = ["version"]
+description = "A minimal, transparent AI coding agent — multi-provider (Claude, GPT, Groq, Gemini, GLM, Ollama), sandboxed, with a planner, sub-agents, skills, data analysis, and slide generation."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
+authors = [{ name = "Ashutosh Sharma" }]
+keywords = [
+    "ai",
+    "agent",
+    "llm",
+    "coding-assistant",
+    "cli",
+    "anthropic",
+    "claude",
+    "openai",
+    "groq",
+    "gemini",
+    "ollama",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# openai is core (not an extra): Groq, Gemini, OpenRouter, EURI, GLM and Ollama
+# all ride the OpenAI-compatible path — a clean install must work with a free key.
 dependencies = [
     "anthropic>=0.40",
+    "openai>=1.30",
     "rich>=13.0",
 ]
 
 [project.optional-dependencies]
-openai = ["openai>=1.30"]
+openai = [] # backward-compat: openai moved into core dependencies in 0.4.0
 data = ["pandas>=2.0", "python-pptx>=0.6.21", "openpyxl>=3.1"]
-dev = ["pytest>=7.4", "ruff>=0.1", "mypy>=1.8"]
+dev = ["pytest>=7.4", "ruff>=0.1", "mypy>=1.8", "build>=1.0", "twine>=5.0"]
+all = ["pi-coding-agent[data]"]
 
 [project.scripts]
 pi = "pi_agent.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/Ashutosh0428/pi-agent"
+Repository = "https://github.com/Ashutosh0428/pi-agent"
+Issues = "https://github.com/Ashutosh0428/pi-agent/issues"
+Changelog = "https://github.com/Ashutosh0428/pi-agent/blob/main/CHANGELOG.md"
+"Live Demo" = "https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pi_agent.__version__" }
 
 [tool.ruff]
 line-length = 100
