@@ -72,9 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         thinking=config.thinking,
         thinking_budget=config.thinking_budget,
     )
-    # The CLI is always local/trusted, so the read-only git tool is safe here
-    # (it is left off the public web demo).
-    registry = build_default_tools(enable_shell=config.enable_shell, enable_vcs=True)
+    # The CLI is always local/trusted, so the read-only git tool and the
+    # SSRF-guarded web_fetch are safe here (both are left off the public demo).
+    registry = build_default_tools(
+        enable_shell=config.enable_shell, enable_vcs=True, enable_web=True
+    )
     sandbox = Sandbox(args.dir)
     agent = Agent(provider=provider, registry=registry, sandbox=sandbox, config=config)
 

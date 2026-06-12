@@ -14,6 +14,7 @@ from pi_agent.tools.search import search_tools
 from pi_agent.tools.shell import shell_tools
 from pi_agent.tools.subagent import subagent_tools
 from pi_agent.tools.vcs import git_tools
+from pi_agent.tools.web import web_tools
 
 
 class ToolRegistry:
@@ -62,6 +63,7 @@ def build_default_tools(
     enable_subagents: bool = False,
     enable_data: bool = False,
     enable_vcs: bool = False,
+    enable_web: bool = False,
 ) -> ToolRegistry:
     """Assemble the default tool set.
 
@@ -73,7 +75,9 @@ def build_default_tools(
     ``enable_data`` adds ``analyze_data`` + ``make_slides`` (need the [data]
     extra).
     ``enable_vcs`` adds the read-only ``git`` tool (local/trusted; inherits the
-    real environment to find git). All are independent.
+    real environment to find git).
+    ``enable_web`` adds the SSRF-guarded ``web_fetch`` tool (local/trusted only).
+    All are independent.
     """
     tools = [*planning_tools(), *filesystem_tools(), *search_tools()]
     if enable_shell:
@@ -86,4 +90,6 @@ def build_default_tools(
         tools += data_tools()
     if enable_vcs:
         tools += git_tools()
+    if enable_web:
+        tools += web_tools()
     return ToolRegistry(tools)
