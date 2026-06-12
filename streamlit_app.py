@@ -90,9 +90,9 @@ st.markdown(
       /* sidebar */
       [data-testid="stSidebar"] { border-right: 1px solid rgba(255,255,255,.06); }
       /* provider pills */
-      .pill { display:inline-block; padding:.18rem .6rem; margin:.15rem; border-radius:999px;
+      .pill { display:inline-block; padding:.2rem .65rem; margin:.15rem .25rem; border-radius:999px;
         font-size:.78rem; background:rgba(124,92,255,.14); border:1px solid rgba(124,92,255,.3);
-        color:#cdb8ff; }
+        color:#cdb8ff; white-space:nowrap; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -136,9 +136,12 @@ def _render_plan(box, steps) -> None:
 with st.sidebar:
     st.header("⚙️ Setup")
 
+    # Default to Groq: free key (no card), fast, and tool-capable — a first-time
+    # visitor should land on a provider they can actually use in one minute.
     provider = st.selectbox(
         "Provider",
         list(PROVIDERS),
+        index=list(PROVIDERS).index("groq"),
         format_func=lambda p: f"{p.title()}  🆓" if PROVIDERS[p].free else p.title(),
     )
     spec = PROVIDERS[provider]
@@ -285,7 +288,7 @@ def _get_agent() -> Agent:
                 system_prompt=system_prompt,
                 enable_shell=False,
                 auto_approve=True,  # mutations are confined to the temp sandbox
-                stream=False,  # render plan + tool steps + final answer in Streamlit
+                stream=True,  # live token streaming via assistant_delta events
             ),
         )
         st.session_state.agent = agent
@@ -301,8 +304,33 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+# Starter prompts — shown only on an empty conversation, so a first-time
+# visitor can click once instead of inventing a prompt.
+STARTERS = (
+    (
+        "✍️ Write a function + test",
+        "Write a Python function that reverses a string, save it to utils.py, then write a pytest test for it and show me both files.",
+    ),
+    (
+        "📦 Explain my uploaded project",
+        "Explain this project: its purpose, how the pieces flow together, and the main components. If the workspace is empty, tell me to upload a project .zip in the sidebar first.",
+    ),
+    (
+        "📊 Analyze data → slide deck",
+        "Analyze the uploaded data file like a data scientist (stats, missing values, correlations), then make a short .pptx slide deck of the findings. If the workspace is empty, tell me to upload a CSV in the sidebar first.",
+    ),
+)
+if not st.session_state.messages:
+    st.caption("✨ Try one:")
+    _chip_cols = st.columns(len(STARTERS))
+    for _col, (_label, _text) in zip(_chip_cols, STARTERS):
+        if _col.button(_label, use_container_width=True):
+            st.session_state.queued_prompt = _text
+
 # ── Chat turn ────────────────────────────────────────────────────────────────
-prompt = st.chat_input("Ask pi to plan, write, review, or edit code…")
+prompt = st.session_state.pop("queued_prompt", None) or st.chat_input(
+    "Ask pi to plan, write, review, or edit code…"
+)
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -327,12 +355,22 @@ if prompt:
     with st.chat_message("assistant"):
         plan_box = st.empty()
         status = st.status("pi is working…", expanded=True)
+        answer_box = st.empty()
         usage_box = {"in": 0, "out": 0}
+        stream_buf = {"text": ""}
 
         def on_event(kind, payload):
             if kind == "plan":
                 _render_plan(plan_box, payload)
+            elif kind == "assistant_delta":
+                # Live token stream. Text emitted before a tool call is interim
+                # narration — the tool_call branch clears it so only the final
+                # answer remains in the box.
+                stream_buf["text"] += payload
+                answer_box.markdown(stream_buf["text"] + "▌")
             elif kind == "tool_call":
+                stream_buf["text"] = ""
+                answer_box.empty()
                 status.write(f"🔧 `{payload.name}({_fmt_args(payload.args)})`")
             elif kind == "tool_result":
                 out = payload["output"]
@@ -343,9 +381,9 @@ if prompt:
 
         agent.on_event = on_event
         try:
-            answer = agent.run(prompt)
+            answer = agent.run(effective_prompt)
             status.update(label="done", state="complete", expanded=False)
-            st.markdown(answer or "_(no text response)_")
+            answer_box.markdown(answer or "_(no text response)_")
             st.session_state.messages.append(
                 {"role": "assistant", "content": answer or "_(no text response)_"}
             )
