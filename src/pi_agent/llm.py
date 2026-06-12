@@ -19,6 +19,9 @@ vendor SDK — keys come from the environment (see :mod:`pi_agent.cli`).
 from __future__ import annotations
 
 import json
+import os
+import socket
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable
 
@@ -537,6 +540,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
         "ZAI_API_KEY",
         "https://z.ai/manage-apikey/apikey-list",
         base_url="https://api.z.ai/api/paas/v4",
+        free=True,  # glm-4.5-flash is free; GLM-5 models are paid
         models=("glm-4.5-flash", "glm-5.1", "glm-5", "glm-5-turbo", "glm-4.5-air"),
     ),
     # Local + private + free: runs against an Ollama server on the same machine.
@@ -553,6 +557,37 @@ PROVIDERS: dict[str, ProviderSpec] = {
         models=("qwen2.5-coder:7b", "llama3.1", "deepseek-coder"),
     ),
 }
+
+
+# When the user gives no provider/model, auto-detect from whichever API keys
+# are set: strongest paid first, then the strongest free tiers, then the
+# aggregators. Local Ollama is the last resort (only if its server answers).
+DETECTION_ORDER = ("anthropic", "openai", "gemini", "groq", "glm", "euri", "openrouter")
+
+
+def ollama_running(host: str = "localhost", port: int = 11434, timeout: float = 0.2) -> bool:
+    """True when a local Ollama server is listening on its default port."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def detect_provider(env: Mapping[str, str] | None = None) -> str | None:
+    """Pick the best configured provider from the API keys in the environment.
+
+    Checked in :data:`DETECTION_ORDER`; falls back to local Ollama when no key
+    is set but a server is reachable. ``None`` means nothing is configured —
+    the CLI shows first-run onboarding instead of an error.
+    """
+    environ: Mapping[str, str] = os.environ if env is None else env
+    for name in DETECTION_ORDER:
+        if environ.get(PROVIDERS[name].key_env):
+            return name
+    if ollama_running():
+        return "ollama"
+    return None
 
 
 def build_provider(
