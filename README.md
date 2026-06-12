@@ -7,6 +7,8 @@
 
 <p align="center">
   <a href="https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml"><img src="https://github.com/Ashutosh0428/pi-agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://pypi.org/project/pi-coding-agent/"><img src="https://img.shields.io/pypi/v/pi-coding-agent" alt="PyPI"></a>
+  <a href="https://pypi.org/project/pi-coding-agent/"><img src="https://img.shields.io/pypi/dm/pi-coding-agent" alt="Downloads"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
   <a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/"><img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg" alt="Open in Streamlit"></a>
@@ -14,12 +16,16 @@
 
 <p align="center">
   <b><a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/">🚀 Try it live</a></b> &nbsp;·&nbsp;
-  <a href="#-run-it-locally">Run locally</a> &nbsp;·&nbsp;
+  <a href="#-install">Install</a> &nbsp;·&nbsp;
   <a href="#-skills">Skills</a> &nbsp;·&nbsp;
   <a href="#-architecture">Architecture</a>
 </p>
 
 ---
+
+<p align="center">
+  <a href="https://mj3ivlmagpfgsjpxirxbpv.streamlit.app/"><img src="docs/assets/web-demo.png" alt="pi-agent web demo — free Groq default, BYO key" width="85%"></a>
+</p>
 
 pi lets an LLM **read, edit, and run code** in your working directory through a
 tool-use loop — and shows you everything it does. It speaks to **Claude, GPT,
@@ -49,7 +55,7 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 
 | | |
 |---|---|
-| 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** · **EURI** · **GLM** (free) · **Ollama** (local, no key) — switch mid-chat with `/model` |
+| 🧠 **Multi-provider** | Claude · GPT · **Groq** · **OpenRouter** · **Gemini** · **EURI** · **GLM** (free) · **Ollama** (local, no key) — switch mid-chat with `/model`; bare `pi` auto-detects from your env keys |
 | 📋 **Planner + live todos** | declares a plan via `update_plan`; the web app renders a live ⬜→⏳→✅ checklist |
 | 🤝 **Sub-agents** | `delegate` a focused subtask to a sequential sub-agent (no recursion) for big jobs |
 | 📦 **Project ZIP upload** | drop a zipped repo (zip-slip-safe) → *"explain this project"* (purpose, flow, components) |
@@ -66,13 +72,19 @@ streaming text, a live to-do checklist, and the running token cost as it goes.
 `run_command` (restricted, public-safe) · `run_bash` (full shell, local only) ·
 `analyze_data` · `make_slides`.
 
-## 🚀 Run it locally
+## 🚀 Install
 
 ```bash
-git clone https://github.com/Ashutosh0428/pi-agent && cd pi-agent
-pip install -e ".[openai]"          # core + OpenAI/Groq/OpenRouter/Ollama
-pip install -e ".[openai,data]"     # add data analysis + slides (pandas, python-pptx)
+pipx install pi-coding-agent        # recommended for the CLI
+uv tool install pi-coding-agent     # or with uv
+pip install "pi-coding-agent[data]" # or plain pip (+ data analysis & slides)
 ```
+
+(For hacking on it: `git clone https://github.com/Ashutosh0428/pi-agent && cd pi-agent && pip install -e ".[data,dev]"` — see [CONTRIBUTING.md](CONTRIBUTING.md).)
+
+**No key? Just run `pi`.** It auto-detects whichever provider key you've set —
+and with none at all it shows a quick-setup panel with three free paths (Groq,
+Gemini, Ollama) instead of an error.
 
 Pick a provider and set its key (env var, or `cp .env.example .env`):
 
@@ -93,7 +105,8 @@ field), and `--model` takes any id the provider offers, free or paid:
 `claude-sonnet-4-6` / `claude-opus-4-8`, `llama-3.3-70b-versatile`, etc.
 
 ```bash
-pi                                                          # interactive REPL (defaults to Claude)
+pi                                                          # REPL — provider auto-detected from your env keys
+pi "explain this repo"                                      # one-shot, same auto-detection
 pi --provider groq --model llama-3.3-70b-versatile "explain this repo"
 pi --provider gemini --model gemini-3.5-flash "summarise what this project does"  # free
 pi --provider gemini --model gemini-3.1-pro  "deep-review this module"             # paid (student Pro)
@@ -103,6 +116,14 @@ pi --no-shell                                               # safe mode (disable
 ```
 
 REPL commands: `/help` · `/tools` · `/model <id>` · `/think` · `/cost` · `/reset` · `/exit`.
+Flags: `--provider` · `--model` · `--dir` · `--yes` · `--no-shell` · `--no-stream` · `--think` · `--skills-dir` · `--version`.
+
+### 🐳 Docker
+
+```bash
+docker build -t pi-agent .
+docker run -it --rm -e GROQ_API_KEY -v "$PWD":/work pi-agent "explain this repo"
+```
 
 > **Keys never touch the repo** — read from the environment only, never stored or
 > logged; `.env` is gitignored.
@@ -123,6 +144,8 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py      # http://localhost:8501
 ```
 
+- **Free by default** — opens on Groq (🆓 key, no card); one-click **starter prompts** on an empty chat.
+- **Live streaming** — the answer renders token by token while tool steps stay visible.
 - **Bring your own key** — used only for the session; never stored, logged, or committed.
 - **No raw shell** — visitors get `run_command` (read-only allowlist, no network, sandboxed) instead of `run_bash`.
 - **Upload a file, a project `.zip`, or a CSV** — then *review*, *explain the project*, or *analyze the data and make a deck*.
@@ -206,7 +229,7 @@ transcript, call the API, return an `AssistantResponse`). The agent loop is unch
 ## ✅ Testing
 
 ```bash
-pytest          # 100 tests — scripted fake provider, no API key, no network
+pytest          # 112 tests — scripted fake provider, no API key, no network
 ```
 
 Covers the sandbox boundary, every tool (including the `run_command` RCE guard,
@@ -218,11 +241,12 @@ zip-slip safety.
 ## 🗺️ Roadmap
 
 - ~~Read-only `git` tool~~ · ~~`web_fetch`~~ · ~~streaming on every provider~~ — done in 0.3
+- ~~PyPI release~~ · ~~provider auto-detection~~ · ~~web starter prompts + live streaming~~ — done in 0.4
 - `apply_patch` (multi-file edits in one tool call)
 - Token-aware (not count-based) history trimming
 - Charts in `analyze_data`; skill auto-selection by relevance
 
-See [CHANGELOG.md](CHANGELOG.md) for the full 0.3 release.
+See [CHANGELOG.md](CHANGELOG.md) for full release notes.
 
 ---
 
